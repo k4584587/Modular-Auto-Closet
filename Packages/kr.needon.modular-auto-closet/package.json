@@ -1,0 +1,12 @@
+{
+  "name": "com.hirami.needon.modular-auto-closet",
+  "displayName": "Modular Auto Closet Tool",
+  "version": "1.0.0",
+  "unity": "2022.3",
+  "vrchatVersion": "2022.1.1",
+  "author": {
+    "name": "Momo the Monster",
+    "email": "momodmonster@gmail.com",
+    "url": "https://mmmlabs.com"
+  }
+}
