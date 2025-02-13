@@ -10,10 +10,7 @@ namespace needon.Editor
         private const string Version = "1.0.0";
         private AutoCloset _component;
 
-
         private VRCAvatarDescriptor _avatarDescriptor;
-
-
         private SerializedObject _autoCloset;
 
         public void OnEnable()
@@ -63,7 +60,7 @@ namespace needon.Editor
 
             #endregion
 
-            const string title = "AutoCloset Tool";
+            const string title = "Auto Closet Tool";
             var height = titleLabelStyle.CalcHeight(new GUIContent(title), EditorGUIUtility.currentViewWidth);
             var titleRect = EditorGUILayout.GetControlRect(GUILayout.Height(height));
             EditorGUI.LabelField(titleRect, title, titleLabelStyle);
@@ -94,7 +91,7 @@ namespace needon.Editor
 
             EditorGUI.LabelField(
                 linkRect,
-                "이 툴은 kamyu님의 'HipsGrab Tool'을 참고하였습니다.",
+                "This tool was inspired by Kamyu HipsGrab Tool",
                 referenceLabelStyle
             );
 
