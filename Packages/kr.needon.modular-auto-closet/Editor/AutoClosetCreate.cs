@@ -23,15 +23,18 @@ namespace needon.Editor
                 if (!ValidateCore(selectedObject))
                     continue;
 
+                // 각 선택된 오브젝트마다 고유한 파라미터 이름 생성 (예: AutoCloset_8자리해시)
+                string uniqueName = "AutoCloset_" + System.Guid.NewGuid().ToString("N").Substring(0, 8);
+
                 Texture2D componentIcon = AssetDatabase.LoadAssetAtPath<Texture2D>("Packages/com.hirami.needon.modular-auto-closet/Resource/ClosetIcon.png");
-                ApplyComponents(selectedObject, componentIcon);
-                ApplyToChildren(selectedObject);
+                ApplyComponents(selectedObject, componentIcon, uniqueName);
+                ApplyToChildren(selectedObject, uniqueName);
             }
         }
 
         private static bool ValidateCore(GameObject obj) => obj != null && obj.GetComponentInChildren<AutoCloset>() == null;
 
-        private static void ApplyComponents(GameObject targetObject, Texture2D icon = null)
+        private static void ApplyComponents(GameObject targetObject, Texture2D icon = null, string uniqueName = null)
         {
             // 필요한 컴포넌트 추가 (중복 방지)
             if (targetObject.GetComponent<AutoCloset>() == null)
@@ -43,12 +46,12 @@ namespace needon.Editor
             var maParameters = targetObject.GetComponent<ModularAvatarParameters>() ?? targetObject.AddComponent<ModularAvatarParameters>();
             var maMenuItem = targetObject.GetComponent<ModularAvatarMenuItem>() ?? targetObject.AddComponent<ModularAvatarMenuItem>();
 
-            // Int 파라미터 생성
-            if (maParameters.parameters.All(p => p.nameOrPrefix != "AutoCloset"))
+            // Int 파라미터 생성 (고유 파라미터 이름 사용)
+            if (maParameters.parameters.All(p => p.nameOrPrefix != uniqueName))
             {
                 maParameters.parameters.Add(new ParameterConfig
                 {
-                    nameOrPrefix = "AutoCloset",
+                    nameOrPrefix = uniqueName,
                     syncType = ParameterSyncType.Int,
                     defaultValue = 0,
                     saved = true
@@ -61,7 +64,7 @@ namespace needon.Editor
             maMenuItem.Control.icon = icon; // 메뉴 아이콘 설정
         }
 
-        private static void ApplyToChildren(GameObject parentObject)
+        private static void ApplyToChildren(GameObject parentObject, string uniqueName)
         {
             // 모든 직계 자식 오브젝트들의 리스트를 가져옴
             var children = new List<Transform>();
@@ -81,12 +84,12 @@ namespace needon.Editor
                 {
                     var childMenuItem = child.gameObject.AddComponent<ModularAvatarMenuItem>();
 
-                    // MenuItem 설정
+                    // MenuItem 설정 (고유 파라미터 이름 사용)
                     childMenuItem.Control ??= new VRCExpressionsMenu.Control();
                     childMenuItem.Control.type = VRCExpressionsMenu.Control.ControlType.Toggle;
                     childMenuItem.Control.parameter = new VRCExpressionsMenu.Control.Parameter
                     {
-                        name = "AutoCloset"
+                        name = uniqueName
                     };
                     childMenuItem.Control.value = i; // 순차적으로 증가하는 값 할당
 

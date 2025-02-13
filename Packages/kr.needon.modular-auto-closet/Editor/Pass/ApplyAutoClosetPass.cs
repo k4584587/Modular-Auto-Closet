@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Linq;
+using nadena.dev.modular_avatar.core;
 using nadena.dev.ndmf;
 using UnityEditor;
 using UnityEditor.Animations;
@@ -8,107 +10,112 @@ namespace needon.Editor.Pass
 {
     internal class ApplyAutoClosetPass : Pass<ApplyAutoClosetPass>
     {
-        private const string ToggleParameterName = "AutoCloset";
-        private const string AnimatorLayerName = "AutoCloset";
-
         private AnimatorController _autoClosetController;
-        private int _layerIndex = -1;
 
         protected override void Execute(BuildContext context)
         {
             try
             {
-                InitializeControllerAndLayer(context);
-                ProcessAutoCloset(context);
+                var avatar = context.AvatarDescriptor;
+                _autoClosetController = (AnimatorController)AutoClosetUtil.GetAvatarFxAnimator(avatar);
+
+                if (_autoClosetController == null)
+                {
+                    throw new InvalidOperationException("Cannot find FX Animator Controller.");
+                }
+
+                // 아바타에 부착된 모든 AutoCloset 컴포넌트를 가져옴
+                var closetComponents = avatar.GetComponentsInChildren<AutoCloset>();
+                foreach (var closetComponent in closetComponents)
+                {
+                    GameObject closetGameObject = closetComponent.gameObject;
+                    if (!ValidateCloset(closetGameObject))
+                    {
+                        continue;
+                    }
+
+                    // 각 옷장의 ModularAvatarParameters에 생성된 고유 파라미터 이름을 가져옴
+                    string uniqueName = GetUniqueParameterName(closetGameObject);
+                    if (string.IsNullOrEmpty(uniqueName))
+                    {
+                        // 고유 파라미터가 없으면 새로 생성 (예: AutoCloset_8자리해시)
+                        uniqueName = "AutoCloset_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                    }
+
+                    // 각 옷장마다 별도의 애니메이터 레이어와 파라미터 생성
+                    CreateLayerAndParameter(uniqueName);
+                    int layerIndex = FindAutoClosetLayerIndex(uniqueName);
+                    AnimatorStateMachine stateMachine = _autoClosetController.layers[layerIndex].stateMachine;
+
+                    CreateClosetStates(closetGameObject, stateMachine, uniqueName);
+                }
             }
             catch (Exception e)
             {
-                Debug.LogError($"AutoCloset 처리 중 오류 발생: {e.Message}");
+                Debug.LogError($"Error occurred during AutoCloset processing: {e.Message}");
                 throw;
             }
         }
 
-        private void InitializeControllerAndLayer(BuildContext context)
+        private string GetUniqueParameterName(GameObject closet)
         {
-            var avatar = context.AvatarDescriptor;
-            _autoClosetController = (AnimatorController)AutoClosetUtil.GetAvatarFxAnimator(avatar);
-
-            if (_autoClosetController == null)
+            var maParameters = closet.GetComponent<ModularAvatarParameters>();
+            if (maParameters != null && maParameters.parameters != null)
             {
-                throw new InvalidOperationException("FX Animator Controller를 찾을 수 없습니다.");
+                // "AutoCloset_"로 시작하는 파라미터를 찾음
+                var parameterConfig = maParameters.parameters.FirstOrDefault(p => p.nameOrPrefix.StartsWith("AutoCloset_"));
+                return parameterConfig.nameOrPrefix;
             }
 
-            CreateLayerAndParameter();
-            _layerIndex = FindAutoClosetLayerIndex();
+            return null;
         }
 
-        private void CreateLayerAndParameter()
+        private void CreateLayerAndParameter(string uniqueName)
         {
-            AutoClosetUtil.ApplyCreateAnimatorLayer(_autoClosetController, AnimatorLayerName);
-            AutoClosetUtil.AddAnimatorParameter(_autoClosetController, ToggleParameterName, AnimatorControllerParameterType.Int);
+            AutoClosetUtil.ApplyCreateAnimatorLayer(_autoClosetController, uniqueName);
+            AutoClosetUtil.AddAnimatorParameter(_autoClosetController, uniqueName, AnimatorControllerParameterType.Int);
             EditorUtility.SetDirty(_autoClosetController);
             AssetDatabase.SaveAssets();
         }
 
-        private int FindAutoClosetLayerIndex()
+        private int FindAutoClosetLayerIndex(string uniqueName)
         {
             for (int i = 0; i < _autoClosetController.layers.Length; i++)
             {
-                if (_autoClosetController.layers[i].name == AnimatorLayerName)
+                if (_autoClosetController.layers[i].name == uniqueName)
                 {
                     return i;
                 }
             }
 
-            throw new InvalidOperationException($"'{AnimatorLayerName}' 레이어를 찾을 수 없습니다.");
+            throw new InvalidOperationException($"Cannot find layer '{uniqueName}'.");
         }
-
-        private void ProcessAutoCloset(BuildContext context)
-        {
-            var autoClosetContext = context.Extension<AutoClosetContext>();
-            if (autoClosetContext == null || autoClosetContext.AutoCloset == null)
-            {
-                return;
-            }
-
-            var autoCloset = autoClosetContext.AutoCloset;
-            var closetGameObject = autoCloset.gameObject;
-
-            if (!ValidateCloset(closetGameObject))
-            {
-                return;
-            }
-
-            var stateMachine = _autoClosetController.layers[_layerIndex].stateMachine;
-            CreateClosetStates(closetGameObject, stateMachine);
-        }
-
 
         private bool ValidateCloset(GameObject closet)
         {
             if (closet == null) return false;
             if (closet.transform.childCount == 0)
             {
-                Debug.LogWarning("옷장에 자식 오브젝트가 없습니다.");
+                Debug.LogWarning("The closet does not have any child objects.");
                 return false;
             }
 
             return true;
         }
 
-        private void CreateClosetStates(GameObject closet, AnimatorStateMachine stateMachine)
+        private void CreateClosetStates(GameObject closet, AnimatorStateMachine stateMachine, string uniqueName)
         {
             string parentName = closet.transform.parent != null ? closet.transform.parent.name : closet.name;
             Transform defaultClothes = closet.transform.GetChild(0);
 
-            // 기본옷 상태 생성
-            CreateDefaultClothesState(closet, parentName, defaultClothes, stateMachine);
+            // 기본 옷 상태 생성
+            CreateDefaultClothesState(closet, parentName, defaultClothes, stateMachine, uniqueName);
 
             // 추가 옷 상태 생성
-            CreateAdditionalClothesStates(closet, parentName, defaultClothes, stateMachine);
+            CreateAdditionalClothesStates(closet, parentName, defaultClothes, stateMachine, uniqueName);
         }
 
-        private void CreateDefaultClothesState(GameObject closet, string parentName, Transform defaultClothes, AnimatorStateMachine stateMachine)
+        private void CreateDefaultClothesState(GameObject closet, string parentName, Transform defaultClothes, AnimatorStateMachine stateMachine, string uniqueName)
         {
             AnimationClip defaultClip = AutoClosetUtil.CreateClosetAnimationClip(closet, parentName, defaultClothes.name);
             AnimatorState defaultState = stateMachine.AddState(defaultClothes.name, new Vector3(300, 0, 0));
@@ -116,10 +123,10 @@ namespace needon.Editor.Pass
             stateMachine.defaultState = defaultState;
 
             var anyToDefaultTransition = stateMachine.AddAnyStateTransition(defaultState);
-            ConfigureTransition(anyToDefaultTransition, 0);
+            ConfigureTransition(anyToDefaultTransition, 0, uniqueName);
         }
 
-        private void CreateAdditionalClothesStates(GameObject closet, string parentName, Transform defaultClothes, AnimatorStateMachine stateMachine)
+        private void CreateAdditionalClothesStates(GameObject closet, string parentName, Transform defaultClothes, AnimatorStateMachine stateMachine, string uniqueName)
         {
             int index = 1;
             foreach (Transform child in closet.transform)
@@ -131,18 +138,18 @@ namespace needon.Editor.Pass
                 newState.motion = stateClip;
 
                 var anyStateTransition = stateMachine.AddAnyStateTransition(newState);
-                ConfigureTransition(anyStateTransition, index);
+                ConfigureTransition(anyStateTransition, index, uniqueName);
 
                 index++;
             }
         }
 
-        private void ConfigureTransition(AnimatorStateTransition transition, int parameterValue)
+        private void ConfigureTransition(AnimatorStateTransition transition, int parameterValue, string uniqueName)
         {
             transition.hasExitTime = false;
             transition.exitTime = 0f;
             transition.duration = 0f;
-            transition.AddCondition(AnimatorConditionMode.Equals, parameterValue, ToggleParameterName);
+            transition.AddCondition(AnimatorConditionMode.Equals, parameterValue, uniqueName);
         }
     }
 }
