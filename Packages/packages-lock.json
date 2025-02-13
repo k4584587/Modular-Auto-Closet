@@ -1,11 +1,5 @@
 {
   "dependencies": {
-    "com.hirami.needon.modular-auto-closet": {
-      "version": "file:kr.needon.modular-auto-closet",
-      "depth": 0,
-      "source": "embedded",
-      "dependencies": {}
-    },
     "com.unity.ai.navigation": {
       "version": "1.1.5",
       "depth": 0,
@@ -210,6 +204,12 @@
     },
     "jp.lilxyzw.liltoon": {
       "version": "file:jp.lilxyzw.liltoon",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
+    "kr.needon.modular-auto-closet": {
+      "version": "file:kr.needon.modular-auto-closet",
       "depth": 0,
       "source": "embedded",
       "dependencies": {}

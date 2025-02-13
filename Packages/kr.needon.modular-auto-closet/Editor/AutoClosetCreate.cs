@@ -26,7 +26,7 @@ namespace needon.Editor
                 // 각 선택된 오브젝트마다 고유한 파라미터 이름 생성 (예: AutoCloset_8자리해시)
                 string uniqueName = "AutoCloset_" + System.Guid.NewGuid().ToString("N").Substring(0, 8);
 
-                Texture2D componentIcon = AssetDatabase.LoadAssetAtPath<Texture2D>("Packages/com.hirami.needon.modular-auto-closet/Resource/ClosetIcon.png");
+                Texture2D componentIcon = AssetDatabase.LoadAssetAtPath<Texture2D>("Packages/kr.needon.modular-auto-closet/Resource/ClosetIcon.png");
                 ApplyComponents(selectedObject, componentIcon, uniqueName);
                 ApplyToChildren(selectedObject, uniqueName);
             }

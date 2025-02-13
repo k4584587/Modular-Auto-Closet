@@ -26,7 +26,7 @@ namespace needon.Editor
         {
             _autoCloset.Update();
 
-            var logoTexture = AssetDatabase.LoadAssetAtPath<Texture2D>("Packages/com.hirami.needon.modular-auto-closet/Resource/ClosetIcon.png");
+            var logoTexture = AssetDatabase.LoadAssetAtPath<Texture2D>("Packages/kr.needon.modular-auto-closet/Resource/ClosetIcon.png");
             if (logoTexture != null)
             {
                 GUILayout.BeginHorizontal();
