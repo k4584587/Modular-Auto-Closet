@@ -1,5 +1,9 @@
 # Modular Auto Closet Tool
 
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/k4584587/Modular-Auto-Closet?label=release)
+
+[VCC Download](https://k4584587.github.io/Modular-Auto-Closet/) [Booth Download](https://booth.pm/ja/items/6605030)
+
 <div align="center">
   <img src="https://github.com/user-attachments/assets/78f58672-1996-426f-b4ca-543f68765127" alt="Modular Auto Closet Tool" width="200" />
 </div>
