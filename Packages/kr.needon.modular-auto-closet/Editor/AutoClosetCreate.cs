@@ -33,12 +33,13 @@ namespace needon.Editor
             }
         }
 
-        // 기존 검증 조건에 ModularAvatarMenuItem 컴포넌트가 있는 경우 false 반환 추가
+        // 기존 검증 조건에 ModularAvatarMenuItem과 ModularAvatarMeshSettings 컴포넌트가 있는 경우 false 반환 추가
         private static bool ValidateCore(GameObject obj) =>
             obj != null &&
             obj.GetComponentInChildren<AutoCloset>() == null &&
             obj.GetComponent<VRC_AvatarDescriptor>() == null &&
-            obj.GetComponent<ModularAvatarMenuItem>() == null;
+            obj.GetComponent<ModularAvatarMenuItem>() == null &&
+            obj.GetComponent<ModularAvatarMeshSettings>() == null;
 
         private static void ApplyComponents(GameObject targetObject, Texture2D icon = null, string uniqueName = null)
         {
@@ -82,7 +83,7 @@ namespace needon.Editor
             // 씬에서의 순서대로 정렬 (위에서 아래로)
             children = children.OrderBy(t => t.GetSiblingIndex()).ToList();
 
-            // 순차적으로 value 값 할당 및 필요한 컴포넌트 추가
+            // 순차적으로 value 값 할당
             for (int i = 0; i < children.Count; i++)
             {
                 var child = children[i];
