@@ -4,6 +4,7 @@ using nadena.dev.modular_avatar.core;
 using UnityEditor;
 using UnityEngine;
 using VRC.SDK3.Avatars.ScriptableObjects;
+using VRC.SDKBase;
 
 namespace needon.Editor
 {
@@ -32,7 +33,12 @@ namespace needon.Editor
             }
         }
 
-        private static bool ValidateCore(GameObject obj) => obj != null && obj.GetComponentInChildren<AutoCloset>() == null;
+        // 기존 검증 조건에 ModularAvatarMenuItem 컴포넌트가 있는 경우 false 반환 추가
+        private static bool ValidateCore(GameObject obj) =>
+            obj != null &&
+            obj.GetComponentInChildren<AutoCloset>() == null &&
+            obj.GetComponent<VRC_AvatarDescriptor>() == null &&
+            obj.GetComponent<ModularAvatarMenuItem>() == null;
 
         private static void ApplyComponents(GameObject targetObject, Texture2D icon = null, string uniqueName = null)
         {
@@ -76,7 +82,7 @@ namespace needon.Editor
             // 씬에서의 순서대로 정렬 (위에서 아래로)
             children = children.OrderBy(t => t.GetSiblingIndex()).ToList();
 
-            // 순차적으로 value 값 할당
+            // 순차적으로 value 값 할당 및 필요한 컴포넌트 추가
             for (int i = 0; i < children.Count; i++)
             {
                 var child = children[i];
@@ -96,6 +102,116 @@ namespace needon.Editor
                     // ModularAvatarShapeChanger 컴포넌트 추가 (중복 방지)
                     if (child.gameObject.GetComponent<ModularAvatarShapeChanger>() == null)
                         child.gameObject.AddComponent<ModularAvatarShapeChanger>();
+                }
+            }
+        }
+
+        // ----------------------------------------------------------------
+        // 옷(클로딩) 오브젝트에 대해 Add Closet 메뉴 추가 (상위에 옷장이 있어야 함)
+        [MenuItem("GameObject/Hirami/Add Closet", true, ContextMenuPriority)]
+        private static bool ValidateAddClosetToClothing()
+        {
+            var selected = Selection.activeGameObject;
+            if (selected == null)
+                return false;
+            if (selected.GetComponent<VRC_AvatarDescriptor>() != null)
+                return false;
+            // 상위에 옷장(Closet) 오브젝트가 존재하는지 확인
+            return FindClosetParent(selected) != null;
+        }
+
+        [MenuItem("GameObject/Hirami/Add Closet", false, ContextMenuPriority)]
+        private static void AddClosetToClothing()
+        {
+            var selected = Selection.activeGameObject;
+            if (selected == null)
+                return;
+
+            var closetParent = FindClosetParent(selected);
+            if (closetParent == null)
+            {
+                Debug.LogError("선택된 오브젝트의 상위에 Closet 오브젝트가 존재하지 않습니다.");
+                return;
+            }
+
+            // 옷장(Closet) 오브젝트의 ModularAvatarParameters에서 고유 파라미터 찾기
+            var maParameters = closetParent.GetComponent<ModularAvatarParameters>();
+            if (maParameters == null || maParameters.parameters == null || maParameters.parameters.Count == 0)
+            {
+                Debug.LogError("Closet 오브젝트에 ModularAvatarParameters가 없거나 파라미터가 존재하지 않습니다.");
+                return;
+            }
+            string uniqueName = null;
+            foreach (var p in maParameters.parameters)
+            {
+                if (p.nameOrPrefix.StartsWith("AutoCloset_"))
+                {
+                    uniqueName = p.nameOrPrefix;
+                    break;
+                }
+            }
+            if (uniqueName == null)
+            {
+                Debug.LogError("Closet 오브젝트에서 유효한 파라미터를 찾을 수 없습니다.");
+                return;
+            }
+
+            // 이미 ModularAvatarMenuItem과 ModularAvatarShapeChanger가 추가되었으면 추가하지 않고 업데이트만 수행
+            var menuItem = selected.GetComponent<ModularAvatarMenuItem>();
+            bool hasComponents = menuItem != null && selected.GetComponent<ModularAvatarShapeChanger>() != null;
+            if (!hasComponents)
+            {
+                if (menuItem == null)
+                    menuItem = selected.AddComponent<ModularAvatarMenuItem>();
+
+                if (selected.GetComponent<ModularAvatarShapeChanger>() == null)
+                    selected.AddComponent<ModularAvatarShapeChanger>();
+
+                menuItem.Control ??= new VRCExpressionsMenu.Control();
+                menuItem.Control.type = VRCExpressionsMenu.Control.ControlType.Toggle;
+                menuItem.Control.parameter = new VRCExpressionsMenu.Control.Parameter { name = uniqueName };
+            }
+            // 상위 Closet의 모든 자식(옷) 오브젝트에 대해 순서를 재계산하여 Value값 자동 할당
+            RecalculateClosetChildren(closetParent, uniqueName);
+        }
+
+        // 선택된 오브젝트의 상위에 존재하는 Closet(옷장) 오브젝트를 찾음
+        private static GameObject FindClosetParent(GameObject obj)
+        {
+            Transform current = obj.transform;
+            while (current != null)
+            {
+                if (current.GetComponent<AutoCloset>() != null)
+                    return current.gameObject;
+                current = current.parent;
+            }
+            return null;
+        }
+
+        // Closet(옷장) 오브젝트의 자식(옷) 오브젝트들에 대해 순서를 재계산하여 ModularAvatarMenuItem의 Value값을 자동 할당
+        private static void RecalculateClosetChildren(GameObject closetObject, string uniqueName)
+        {
+            var children = new List<Transform>();
+            foreach (Transform child in closetObject.transform)
+            {
+                var menuItem = child.GetComponent<ModularAvatarMenuItem>();
+                if (menuItem != null &&
+                    menuItem.Control != null &&
+                    menuItem.Control.parameter != null &&
+                    menuItem.Control.parameter.name == uniqueName)
+                {
+                    children.Add(child);
+                }
+            }
+
+            children = children.OrderBy(t => t.GetSiblingIndex()).ToList();
+
+            for (int i = 0; i < children.Count; i++)
+            {
+                var mi = children[i].GetComponent<ModularAvatarMenuItem>();
+                if (mi != null && mi.Control != null)
+                {
+                    mi.Control.value = i;
                 }
             }
         }
