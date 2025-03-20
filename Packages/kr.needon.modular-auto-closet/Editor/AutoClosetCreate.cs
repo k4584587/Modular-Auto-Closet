@@ -25,21 +25,39 @@ namespace needon.Editor
                     continue;
 
                 // 각 선택된 오브젝트마다 고유한 파라미터 이름 생성 (예: AutoCloset_8자리해시)
-                string uniqueName = "AutoCloset_" + System.Guid.NewGuid().ToString("N").Substring(0, 8);
+                var uniqueName = "AutoCloset_" + System.Guid.NewGuid().ToString("N").Substring(0, 8);
 
-                Texture2D componentIcon = AssetDatabase.LoadAssetAtPath<Texture2D>("Packages/kr.needon.modular-auto-closet/Resource/ClosetIcon.png");
+                // Closet 아이콘 로드
+                var componentIcon = AssetDatabase.LoadAssetAtPath<Texture2D>("Packages/kr.needon.modular-auto-closet/Resource/ClosetIcon.png");
+
+                // 부모 오브젝트에 필요한 컴포넌트 및 메뉴 설정
                 ApplyComponents(selectedObject, componentIcon, uniqueName);
-                ApplyToChildren(selectedObject, uniqueName);
+                // 자식 오브젝트들에도 아이콘 포함하여 설정
+                ApplyToChildren(selectedObject, uniqueName, componentIcon);
             }
         }
 
-        // 기존 검증 조건에 ModularAvatarMenuItem과 ModularAvatarMeshSettings 컴포넌트가 있는 경우 false 반환 추가
+        // 상위 체인에 AutoCloset이 있거나, 자기 자신 또는 자식에 특정 컴포넌트 있으면 false
         private static bool ValidateCore(GameObject obj) =>
             obj != null &&
+            !IsUnderCloset(obj) &&
             obj.GetComponentInChildren<AutoCloset>() == null &&
             obj.GetComponent<VRC_AvatarDescriptor>() == null &&
             obj.GetComponent<ModularAvatarMenuItem>() == null &&
             obj.GetComponent<ModularAvatarMeshSettings>() == null;
+
+        // 부모 체인에 AutoCloset이 있는지 확인
+        private static bool IsUnderCloset(GameObject obj)
+        {
+            var current = obj.transform.parent;
+            while (current != null)
+            {
+                if (current.GetComponent<AutoCloset>() != null)
+                    return true;
+                current = current.parent;
+            }
+            return false;
+        }
 
         private static void ApplyComponents(GameObject targetObject, Texture2D icon = null, string uniqueName = null)
         {
@@ -65,13 +83,14 @@ namespace needon.Editor
                 });
             }
 
+            // 메뉴 아이콘 및 타입 설정
             maMenuItem.Control ??= new VRCExpressionsMenu.Control();
             maMenuItem.Control.type = VRCExpressionsMenu.Control.ControlType.SubMenu;
             maMenuItem.MenuSource = SubmenuSource.Children;
-            maMenuItem.Control.icon = icon; // 메뉴 아이콘 설정
+            maMenuItem.Control.icon = icon;
         }
 
-        private static void ApplyToChildren(GameObject parentObject, string uniqueName)
+        private static void ApplyToChildren(GameObject parentObject, string uniqueName, Texture2D icon)
         {
             // 모든 직계 자식 오브젝트들의 리스트를 가져옴
             var children = new List<Transform>();
@@ -84,26 +103,26 @@ namespace needon.Editor
             children = children.OrderBy(t => t.GetSiblingIndex()).ToList();
 
             // 순차적으로 value 값 할당
-            for (int i = 0; i < children.Count; i++)
+            for (var i = 0; i < children.Count; i++)
             {
                 var child = children[i];
-                if (child.GetComponent<ModularAvatarMenuItem>() == null)
+                if (child.GetComponent<ModularAvatarMenuItem>() != null) continue;
+                var childMenuItem = child.gameObject.AddComponent<ModularAvatarMenuItem>();
+
+                // MenuItem 설정 (고유 파라미터 이름 사용)
+                childMenuItem.Control ??= new VRCExpressionsMenu.Control();
+                childMenuItem.Control.type = VRCExpressionsMenu.Control.ControlType.Toggle;
+                childMenuItem.Control.parameter = new VRCExpressionsMenu.Control.Parameter
                 {
-                    var childMenuItem = child.gameObject.AddComponent<ModularAvatarMenuItem>();
+                    name = uniqueName
+                };
+                childMenuItem.Control.value = i;
+                // 자식 아이콘 설정
+                childMenuItem.Control.icon = icon;
 
-                    // MenuItem 설정 (고유 파라미터 이름 사용)
-                    childMenuItem.Control ??= new VRCExpressionsMenu.Control();
-                    childMenuItem.Control.type = VRCExpressionsMenu.Control.ControlType.Toggle;
-                    childMenuItem.Control.parameter = new VRCExpressionsMenu.Control.Parameter
-                    {
-                        name = uniqueName
-                    };
-                    childMenuItem.Control.value = i; // 순차적으로 증가하는 값 할당
-
-                    // ModularAvatarShapeChanger 컴포넌트 추가 (중복 방지)
-                    if (child.gameObject.GetComponent<ModularAvatarShapeChanger>() == null)
-                        child.gameObject.AddComponent<ModularAvatarShapeChanger>();
-                }
+                // ModularAvatarShapeChanger 컴포넌트 추가 (중복 방지)
+                if (child.gameObject.GetComponent<ModularAvatarShapeChanger>() == null)
+                    child.gameObject.AddComponent<ModularAvatarShapeChanger>();
             }
         }
 
@@ -131,7 +150,7 @@ namespace needon.Editor
             var closetParent = FindClosetParent(selected);
             if (closetParent == null)
             {
-                Debug.LogError("선택된 오브젝트의 상위에 Closet 오브젝트가 존재하지 않습니다.");
+                Debug.LogError("There is no Closet object in the parent of the selected object.");
                 return;
             }
 
@@ -139,27 +158,32 @@ namespace needon.Editor
             var maParameters = closetParent.GetComponent<ModularAvatarParameters>();
             if (maParameters == null || maParameters.parameters == null || maParameters.parameters.Count == 0)
             {
-                Debug.LogError("Closet 오브젝트에 ModularAvatarParameters가 없거나 파라미터가 존재하지 않습니다.");
+                Debug.LogError("The Closet object does not have ModularAvatarParameters or it has no parameters.");
                 return;
             }
             string uniqueName = null;
-            foreach (var p in maParameters.parameters)
+            var index = 0;
+            for (; index < maParameters.parameters.Count; index++)
             {
-                if (p.nameOrPrefix.StartsWith("AutoCloset_"))
-                {
-                    uniqueName = p.nameOrPrefix;
-                    break;
-                }
+                var p = maParameters.parameters[index];
+                if (!p.nameOrPrefix.StartsWith("AutoCloset_")) continue;
+                uniqueName = p.nameOrPrefix;
+                break;
             }
+
             if (uniqueName == null)
             {
-                Debug.LogError("Closet 오브젝트에서 유효한 파라미터를 찾을 수 없습니다.");
+                Debug.LogError("Could not find a valid parameter in the Closet object.");
                 return;
             }
 
             // 이미 ModularAvatarMenuItem과 ModularAvatarShapeChanger가 추가되었으면 추가하지 않고 업데이트만 수행
             var menuItem = selected.GetComponent<ModularAvatarMenuItem>();
-            bool hasComponents = menuItem != null && selected.GetComponent<ModularAvatarShapeChanger>() != null;
+            var hasComponents = menuItem != null && selected.GetComponent<ModularAvatarShapeChanger>() != null;
+
+            // Closet 아이콘 로드
+            var closetIcon = AssetDatabase.LoadAssetAtPath<Texture2D>("Packages/kr.needon.modular-auto-closet/Resource/ClosetIcon.png");
+
             if (!hasComponents)
             {
                 if (menuItem == null)
@@ -171,6 +195,8 @@ namespace needon.Editor
                 menuItem.Control ??= new VRCExpressionsMenu.Control();
                 menuItem.Control.type = VRCExpressionsMenu.Control.ControlType.Toggle;
                 menuItem.Control.parameter = new VRCExpressionsMenu.Control.Parameter { name = uniqueName };
+                // 새로 추가된 옷 아이콘 설정
+                menuItem.Control.icon = closetIcon;
             }
             // 상위 Closet의 모든 자식(옷) 오브젝트에 대해 순서를 재계산하여 Value값 자동 할당
             RecalculateClosetChildren(closetParent, uniqueName);
@@ -179,7 +205,7 @@ namespace needon.Editor
         // 선택된 오브젝트의 상위에 존재하는 Closet(옷장) 오브젝트를 찾음
         private static GameObject FindClosetParent(GameObject obj)
         {
-            Transform current = obj.transform;
+            var current = obj.transform;
             while (current != null)
             {
                 if (current.GetComponent<AutoCloset>() != null)
@@ -197,8 +223,7 @@ namespace needon.Editor
             {
                 var menuItem = child.GetComponent<ModularAvatarMenuItem>();
                 if (menuItem != null &&
-                    menuItem.Control != null &&
-                    menuItem.Control.parameter != null &&
+                    menuItem.Control is { parameter: not null } &&
                     menuItem.Control.parameter.name == uniqueName)
                 {
                     children.Add(child);
@@ -207,7 +232,7 @@ namespace needon.Editor
 
             children = children.OrderBy(t => t.GetSiblingIndex()).ToList();
 
-            for (int i = 0; i < children.Count; i++)
+            for (var i = 0; i < children.Count; i++)
             {
                 var mi = children[i].GetComponent<ModularAvatarMenuItem>();
                 if (mi != null && mi.Control != null)

@@ -7,7 +7,7 @@ namespace needon.Editor
     [CustomEditor(typeof(AutoCloset))]
     public class AutoClosetEditor : UnityEditor.Editor
     {
-        private const string Version = "1.0.0";
+        private string _version;
         private AutoCloset _component;
 
         private VRCAvatarDescriptor _avatarDescriptor;
@@ -20,6 +20,25 @@ namespace needon.Editor
             _component = serializedObject.targetObject as AutoCloset;
 
             _avatarDescriptor = _component?.gameObject.GetComponentInParent<VRCAvatarDescriptor>(true);
+
+            // 컴포넌트 아이콘 변경 (인스펙터 상단에 표시)
+            var iconTexture = AssetDatabase.LoadAssetAtPath<Texture2D>("Packages/kr.needon.modular-auto-closet/Resource/ClosetIcon.png");
+            if (iconTexture != null && _component != null)
+            {
+                EditorGUIUtility.SetIconForObject(_component, iconTexture);
+            }
+
+            // package.json 파일에서 버전 정보를 로드
+            var packageTextAsset = AssetDatabase.LoadAssetAtPath<TextAsset>("Packages/kr.needon.modular-auto-closet/package.json");
+            if (packageTextAsset != null)
+            {
+                var packageInfo = JsonUtility.FromJson<PackageInfo>(packageTextAsset.text);
+                _version = packageInfo.version;
+            }
+            else
+            {
+                _version = "N/A";
+            }
         }
 
         public override void OnInspectorGUI()
@@ -27,7 +46,7 @@ namespace needon.Editor
             _autoCloset.Update();
 
             var logoTexture = AssetDatabase.LoadAssetAtPath<Texture2D>("Packages/kr.needon.modular-auto-closet/Resource/ClosetIcon.png");
-            if (logoTexture != null)
+            if (logoTexture)
             {
                 GUILayout.BeginHorizontal();
                 GUILayout.FlexibleSpace();
@@ -50,7 +69,6 @@ namespace needon.Editor
                 wordWrap = true,
             };
 
-            // 하단에 표시할 문구 스타일
             var referenceLabelStyle = new GUIStyle(EditorStyles.miniLabel)
             {
                 alignment = TextAnchor.MiddleCenter,
@@ -64,21 +82,19 @@ namespace needon.Editor
             var height = titleLabelStyle.CalcHeight(new GUIContent(title), EditorGUIUtility.currentViewWidth);
             var titleRect = EditorGUILayout.GetControlRect(GUILayout.Height(height));
             EditorGUI.LabelField(titleRect, title, titleLabelStyle);
-            EditorGUILayout.LabelField("by Hirami\nv" + Version, descriptionLabelStyle);
+            EditorGUILayout.LabelField("by Hirami\nv" + _version, descriptionLabelStyle);
 
-            if (_component == null)
+            if (!_component)
             {
                 EditorGUILayout.HelpBox("?", MessageType.Error);
                 return;
             }
 
-
-            if (_avatarDescriptor == null)
+            if (!_avatarDescriptor)
             {
                 EditorGUILayout.HelpBox("This component must be placed inside the avatar object!", MessageType.Error);
                 return;
             }
-
 
             _autoCloset.ApplyModifiedProperties();
 
@@ -95,7 +111,6 @@ namespace needon.Editor
                 referenceLabelStyle
             );
 
-
             if (Event.current.type == EventType.MouseUp && linkRect.Contains(Event.current.mousePosition) && Event.current.button == 0)
             {
                 Application.OpenURL("https://kamyu1537.booth.pm/items/3910550");
@@ -106,4 +121,11 @@ namespace needon.Editor
             GUILayout.Space(5);
         }
     }
+
+    [System.Serializable]
+    public class PackageInfo
+    {
+        public string version;
+    }
+    
 }

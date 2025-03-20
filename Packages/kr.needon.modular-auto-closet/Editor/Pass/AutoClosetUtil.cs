@@ -49,8 +49,10 @@ namespace needon.Editor.Pass
 
         public static RuntimeAnimatorController GetAvatarFxAnimator(VRCAvatarDescriptor avatarDescriptor)
         {
-            var controllerLayer = Array.FindIndex(avatarDescriptor.baseAnimationLayers, 
-                item => item.type == VRCAvatarDescriptor.AnimLayerType.FX && item.animatorController);
+            var controllerLayer = Array.FindIndex(
+                avatarDescriptor.baseAnimationLayers, 
+                item => item.type == VRCAvatarDescriptor.AnimLayerType.FX && item.animatorController
+            );
             
             if (controllerLayer == -1)
             {
@@ -66,8 +68,10 @@ namespace needon.Editor.Pass
 
         public static void AddAnimatorParameter(AnimatorController controller, string paramName, AnimatorControllerParameterType type)
         {
-            foreach (var param in controller.parameters)
+            var index = 0;
+            for (; index < controller.parameters.Length; index++)
             {
+                var param = controller.parameters[index];
                 if (param.name == paramName) return;
             }
 
@@ -83,7 +87,7 @@ namespace needon.Editor.Pass
             var clipPath = $"Packages/nadena.dev.ndmf/__Generated/{parentName}/_assets/{activeClothesName}.anim"; 
             
             // 디렉토리가 없으면 생성
-            string directory = System.IO.Path.GetDirectoryName(clipPath);
+            var directory = System.IO.Path.GetDirectoryName(clipPath);
             if (!System.IO.Directory.Exists(directory))
             {
                 if (directory != null) System.IO.Directory.CreateDirectory(directory);
@@ -110,13 +114,14 @@ namespace needon.Editor.Pass
             foreach (Transform child in closet.transform)
             {
                 var isActive = (child.name == activeClothesName);
-                AnimationCurve curve = new AnimationCurve(
-                    new Keyframe(0f, isActive ? 1f : 0f),
-                    new Keyframe(1f, isActive ? 1f : 0f)
+                
+                // 단일 키프레임만 사용하여 0초 시점에만 값을 기록
+                var curve = new AnimationCurve(
+                    new Keyframe(0f, isActive ? 1f : 0f)
                 );
 
                 // 아바타 루트로부터의 상대 경로 계산
-                string relativePath = GetRelativePath(child.transform, avatarRoot);
+                var relativePath = GetRelativePath(child.transform, avatarRoot);
                 Debug.Log($"Setting animation path: {relativePath} (Active: {isActive})");
                 
                 var binding = EditorCurveBinding.FloatCurve(
@@ -151,14 +156,12 @@ namespace needon.Editor.Pass
             AssetDatabase.SaveAssets();
 
             var layers = controller.layers;
-            for (int i = 0; i < layers.Length; i++)
+            for (var i = 0; i < layers.Length; i++)
             {
-                if (layers[i].name == animatorLayerName)
-                {
-                    layers[i] = layer;
-                    controller.layers = layers;
-                    break;
-                }
+                if (layers[i].name != animatorLayerName) continue;
+                layers[i] = layer;
+                controller.layers = layers;
+                break;
             }
         }
     }
