@@ -114,7 +114,7 @@ namespace needon.Editor.Pass
             foreach (Transform child in closet.transform)
             {
                 var isActive = (child.name == activeClothesName);
-                
+
                 // 단일 키프레임만 사용하여 0초 시점에만 값을 기록
                 var curve = new AnimationCurve(
                     new Keyframe(0f, isActive ? 1f : 0f)
@@ -123,14 +123,39 @@ namespace needon.Editor.Pass
                 // 아바타 루트로부터의 상대 경로 계산
                 var relativePath = GetRelativePath(child.transform, avatarRoot);
                 Debug.Log($"Setting animation path: {relativePath} (Active: {isActive})");
-                
+
                 var binding = EditorCurveBinding.FloatCurve(
                     relativePath,
                     typeof(GameObject),
                     "m_IsActive"
                 );
-                
+
                 AnimationUtility.SetEditorCurve(clip, binding, curve);
+
+                // 추가 ClosetToggle 컴포넌트 처리
+                var closetToggle = child.GetComponent<ClosetToggle>();
+                if (closetToggle != null && closetToggle.toggles != null)
+                {
+                    foreach (var toggle in closetToggle.toggles)
+                    {
+                        if (toggle == null || toggle.target == null) continue;
+
+                        var toggleCurve = new AnimationCurve(
+                            new Keyframe(0f, isActive ? (toggle.active ? 1f : 0f) : (toggle.active ? 0f : 1f))
+                        );
+
+                        var togglePath = GetRelativePath(toggle.target.transform, avatarRoot);
+                        Debug.Log($"Toggle path: {togglePath} (Active: {isActive})");
+
+                        var toggleBinding = EditorCurveBinding.FloatCurve(
+                            togglePath,
+                            typeof(GameObject),
+                            "m_IsActive"
+                        );
+
+                        AnimationUtility.SetEditorCurve(clip, toggleBinding, toggleCurve);
+                    }
+                }
             }
 
             // 애니메이션 저장
