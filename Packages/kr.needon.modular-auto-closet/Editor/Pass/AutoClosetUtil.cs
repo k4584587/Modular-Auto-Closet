@@ -156,6 +156,31 @@ namespace needon.Editor.Pass
                         AnimationUtility.SetEditorCurve(clip, toggleBinding, toggleCurve);
                     }
                 }
+
+                // 추가 ClosetBlendshape 컴포넌트 처리
+                var closetBlendshape = child.GetComponent<ClosetBlendshape>();
+                if (closetBlendshape != null && closetBlendshape.items != null)
+                {
+                    foreach (var item in closetBlendshape.items)
+                    {
+                        if (item == null || item.mesh == null) continue;
+
+                        var bsCurve = new AnimationCurve(
+                            new Keyframe(0f, isActive ? item.value : 0f)
+                        );
+
+                        var bsPath = GetRelativePath(item.mesh.transform, avatarRoot);
+                        Debug.Log($"Blendshape path: {bsPath} (Active: {isActive})");
+
+                        var bsBinding = EditorCurveBinding.FloatCurve(
+                            bsPath,
+                            typeof(SkinnedMeshRenderer),
+                            $"blendShape.{item.shapeKey}"
+                        );
+
+                        AnimationUtility.SetEditorCurve(clip, bsBinding, bsCurve);
+                    }
+                }
             }
 
             // 애니메이션 저장
