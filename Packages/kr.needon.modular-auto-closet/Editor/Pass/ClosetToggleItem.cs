@@ -2,7 +2,7 @@
 using UnityEditor;
 using UnityEngine;
 
-namespace Editor.Pass
+namespace needon.Editor.Pass
 {
     // -------- ClosetToggle 용 CustomEditor --------
     [CustomEditor(typeof(ClosetToggle))]
