@@ -22,44 +22,72 @@ namespace needon.Editor
             var selectedObjects = Selection.gameObjects;
             if (selectedObjects.Length == 0) return;
 
-            // Toggle 루트 생성/조회
-            var parent = selectedObjects[0].transform.parent;
-            var toggleRoot = parent != null ? parent.Find("Toggle")?.gameObject : null;
-            if (toggleRoot == null)
+            // 옷장 루트(Closet) 검색: 상위에서 찾고, 없으면 씬 전체에서 검색
+            Transform closetRoot = FindClosetRoot(selectedObjects[0].transform);
+            if (closetRoot == null)
             {
-                toggleRoot = new GameObject("Toggle");
-                if (parent != null) toggleRoot.transform.SetParent(parent, false);
+                var closetComponent = GameObject.FindObjectOfType<AutoCloset>();
+                if (closetComponent != null)
+                    closetRoot = closetComponent.transform;
+            }
+            if (closetRoot == null)
+                throw new Exception("AutoCloset 컴포넌트가 붙어있는 옷장 루트를 찾을 수 없습니다.");
+
+            // 토글 루트 생성/조회 (항상 옷장 하위)
+            var toggleRootObj = closetRoot.Find("Toggle")?.gameObject;
+            if (toggleRootObj == null)
+            {
+                toggleRootObj = new GameObject("Toggle");
+                toggleRootObj.transform.SetParent(closetRoot, false);
             }
 
-            // 메뉴 아이콘
+            // 메뉴 아이콘 로드
             var icon = AssetDatabase.LoadAssetAtPath<Texture2D>(
                 "Packages/kr.needon.modular-auto-closet/Resource/toggleON.png");
 
-            // Modular Avatar 세팅
-            if (toggleRoot.GetComponent<ModularAvatarMenuInstaller>() == null)
-                toggleRoot.AddComponent<ModularAvatarMenuInstaller>();
-
-            var parameters = toggleRoot.GetComponent<ModularAvatarParameters>()
-                             ?? toggleRoot.AddComponent<ModularAvatarParameters>();
-
-            var rootItem = toggleRoot.GetComponent<ModularAvatarMenuItem>()
-                           ?? toggleRoot.AddComponent<ModularAvatarMenuItem>();
+            // Root 메뉴 셋업
+            var rootItem = toggleRootObj.GetComponent<ModularAvatarMenuItem>()
+                           ?? toggleRootObj.AddComponent<ModularAvatarMenuItem>();
             rootItem.Control ??= new VRCExpressionsMenu.Control();
             rootItem.Control.type = VRCExpressionsMenu.Control.ControlType.SubMenu;
             rootItem.MenuSource = SubmenuSource.Children;
             rootItem.Control.icon = icon;
 
-            // Avatar Descriptor 가져오기
-            var avatarRoot = FindAvatarRoot(toggleRoot.transform)
-                ?? throw new Exception("VRCAvatarDescriptor를 찾을 수 없습니다.");
-            var avatarDescriptor = avatarRoot.GetComponent<VRCAvatarDescriptor>();
-
-            // 선택된 각 오브젝트에 대해 Toggle 생성 및 애니메이션 설정
+            // 선택된 각 오브젝트에 대해 Toggle 생성 및 파라미터/메뉴 아이템 설정
             foreach (var obj in selectedObjects)
             {
-                var paramName = $"Toggle_{obj.name}";
+                // UUID 접미사를 통해 중복 방지
+                var suffix = Guid.NewGuid().ToString("N").Substring(0, 8);
+                var baseName = $"Toggle_{obj.name}";
+                var paramName = $"{baseName}_{suffix}";
 
-                // ParameterConfig 등록
+                // 메뉴 아이템 GameObject 생성 또는 조회 (이름에는 suffix 제외)
+                var existingGO = toggleRootObj.transform.Find(baseName);
+                GameObject itemGO;
+                if (existingGO == null)
+                {
+                    itemGO = new GameObject(baseName);
+                    itemGO.transform.SetParent(toggleRootObj.transform, false);
+
+                    // AutoClosetObjectToggle 설정
+                    var toggleComp = itemGO.AddComponent<AutoClosetObjectToggle>();
+                    toggleComp.targets = new[] { new AutoClosetToggleTarget { target = obj, active = true } };
+
+                    // 토글 메뉴 항목 설정
+                    var childItem = itemGO.AddComponent<ModularAvatarMenuItem>();
+                    childItem.Control ??= new VRCExpressionsMenu.Control();
+                    childItem.Control.type = VRCExpressionsMenu.Control.ControlType.Toggle;
+                    childItem.Control.parameter = new VRCExpressionsMenu.Control.Parameter { name = paramName };
+                    childItem.Control.icon = icon;
+                }
+                else
+                {
+                    itemGO = existingGO.gameObject;
+                }
+
+                // 해당 Toggle_<이름> 오브젝트에 파라미터 컴포넌트 추가 및 등록
+                var parameters = itemGO.GetComponent<ModularAvatarParameters>()
+                                 ?? itemGO.AddComponent<ModularAvatarParameters>();
                 if (parameters.parameters.All(p => p.nameOrPrefix != paramName))
                 {
                     parameters.parameters.Add(new ParameterConfig
@@ -70,49 +98,21 @@ namespace needon.Editor
                         saved = true
                     });
                 }
-
-                // 메뉴 아이템 GameObject 생성
-                if (toggleRoot.transform.Find(paramName) == null)
-                {
-                    var itemGO = new GameObject(paramName);
-                    itemGO.transform.SetParent(toggleRoot.transform, false);
-
-                    var toggleComp = itemGO.AddComponent<AutoClosetObjectToggle>();
-                    toggleComp.targets = new[]
-                    {
-                        new AutoClosetToggleTarget
-                        {
-                            target = obj,
-                            active = true
-                        }
-                    };
-
-                    var childItem = itemGO.AddComponent<ModularAvatarMenuItem>();
-                    childItem.Control ??= new VRCExpressionsMenu.Control();
-                    childItem.Control.type = VRCExpressionsMenu.Control.ControlType.Toggle;
-                    childItem.Control.parameter = new VRCExpressionsMenu.Control.Parameter { name = paramName };
-                    childItem.Control.icon = icon;
-                }
-
-                // 빌드 파스에서 애니메이션을 생성하도록 데이터만 설정
-                // (Animator 컨트롤러와 클립은 생성하지 않음)
             }
 
             Debug.Log("비파괴 토글 생성 완료");
         }
 
-        private static Transform FindAvatarRoot(Transform t)
+        // 상위 트랜스폼 중 AutoCloset 컴포넌트가 붙은 옷장 루트를 반환
+        private static Transform FindClosetRoot(Transform t)
         {
             while (t != null)
             {
-                if (t.GetComponent<VRCAvatarDescriptor>() != null)
+                if (t.GetComponent<AutoCloset>() != null)
                     return t;
                 t = t.parent;
             }
             return null;
         }
-
-        // 기존 ModularAvatarObjectToggle과 달리 GameObject 참조를 그대로 저장하므로
-        // 상대 경로 계산 메서드는 더 이상 필요하지 않음.
     }
 }
