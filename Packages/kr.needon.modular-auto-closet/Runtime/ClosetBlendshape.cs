@@ -1,4 +1,5 @@
-﻿using System;
+﻿#if UNITY_EDITOR
+using System;
 using nadena.dev.modular_avatar.core;
 using UnityEngine;
 
@@ -14,3 +15,4 @@ public class ClosetBlendshape : AvatarTagComponent
 {
     public ClosetBlendshapeItem[] shapes;
 }
+#endif

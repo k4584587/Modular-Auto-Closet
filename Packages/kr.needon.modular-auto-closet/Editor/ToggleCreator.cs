@@ -1,9 +1,9 @@
-﻿using System;
+﻿#if UNITY_EDITOR
+using System;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using nadena.dev.modular_avatar.core;
-using VRC.SDK3.Avatars.Components;
 using VRC.SDK3.Avatars.ScriptableObjects;
 
 namespace needon.Editor
@@ -116,3 +116,4 @@ namespace needon.Editor
         }
     }
 }
+#endif

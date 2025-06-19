@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using System;
 using nadena.dev.modular_avatar.core;
 using UnityEngine;
@@ -14,3 +15,4 @@ public class ClosetToggle : AvatarTagComponent
 {
     public ClosetToggleItem[] toggles;
 }
+#endif
