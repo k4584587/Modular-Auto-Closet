@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using nadena.dev.modular_avatar.core;
 using nadena.dev.ndmf;
@@ -42,6 +43,8 @@ namespace needon.Editor.Pass
                         uniqueName = "AutoCloset_" + Guid.NewGuid().ToString("N").Substring(0, 8);
                     }
 
+                    RecalculateClosetChildren(closetGameObject, uniqueName);
+                    
                     // 각 옷장마다 별도의 애니메이터 레이어와 파라미터 생성
                     CreateLayerAndParameter(uniqueName);
                     var layerIndex = FindAutoClosetLayerIndex(uniqueName);
@@ -144,6 +147,26 @@ namespace needon.Editor.Pass
             transition.exitTime = 0f;
             transition.duration = 0f;
             transition.AddCondition(AnimatorConditionMode.Equals, parameterValue, uniqueName);
+        }
+        
+        private void RecalculateClosetChildren(GameObject closetObject, string uniqueName)
+        {
+            var children = new List<Transform>();
+            foreach (Transform child in closetObject.transform)
+            {
+                var menuItem = child.GetComponent<ModularAvatarMenuItem>();
+                if (menuItem != null && menuItem.Control is { parameter: not null } && menuItem.Control.parameter.name == uniqueName)
+                    children.Add(child);
+            }
+
+            children = children.OrderBy(t => t.GetSiblingIndex()).ToList();
+
+            for (var i = 0; i < children.Count; i++)
+            {
+                var mi = children[i].GetComponent<ModularAvatarMenuItem>();
+                if (mi != null && mi.Control != null)
+                    mi.Control.value = i;
+            }
         }
     }
 }
