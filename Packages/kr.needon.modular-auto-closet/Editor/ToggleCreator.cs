@@ -33,7 +33,7 @@ namespace needon.Editor
 
             // 메뉴 아이콘
             var icon = AssetDatabase.LoadAssetAtPath<Texture2D>(
-                "Packages/kr.needon.modular-auto-closet/Resource/ClosetIcon.png");
+                "Packages/kr.needon.modular-auto-closet/Resource/toggleON.png");
 
             // Modular Avatar 세팅
             if (toggleRoot.GetComponent<ModularAvatarMenuInstaller>() == null)
@@ -67,7 +67,7 @@ namespace needon.Editor
                         nameOrPrefix = paramName,
                         syncType = ParameterSyncType.Bool,
                         defaultValue = 1,
-                        saved = true    
+                        saved = true
                     });
                 }
 
