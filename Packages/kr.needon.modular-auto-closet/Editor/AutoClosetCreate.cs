@@ -84,6 +84,7 @@ namespace needon.Editor
 
             maMenuItem.Control ??= new VRCExpressionsMenu.Control();
             maMenuItem.Control.type = VRCExpressionsMenu.Control.ControlType.SubMenu;
+            maMenuItem.Control.value = 0;
             maMenuItem.MenuSource = SubmenuSource.Children;
             maMenuItem.Control.icon = icon;
         }
@@ -108,7 +109,7 @@ namespace needon.Editor
                 {
                     name = uniqueName
                 };
-                childMenuItem.Control.value = i;
+                childMenuItem.Control.value = 0;
                 childMenuItem.Control.icon = icon;
 
                 // Blendshape 및 Toggle 컴포넌트 추가 (중복 방지)
@@ -150,6 +151,8 @@ namespace needon.Editor
                 Debug.LogError("The Closet object does not have ModularAvatarParameters or it has no parameters.");
                 return;
             }
+
+            // 적절한 AutoCloset_ 파라미터 찾기
             string uniqueName = null;
             for (var index = 0; index < maParameters.parameters.Count; index++)
             {
@@ -166,7 +169,9 @@ namespace needon.Editor
             }
 
             var menuItem = selected.GetComponent<ModularAvatarMenuItem>();
-            var hasComponents = menuItem != null && selected.GetComponent<ClosetBlendshape>() != null && selected.GetComponent<ClosetToggle>() != null;
+            var hasComponents = menuItem != null
+                                && selected.GetComponent<ClosetBlendshape>() != null
+                                && selected.GetComponent<ClosetToggle>() != null;
 
             var closetIcon = AssetDatabase.LoadAssetAtPath<Texture2D>(
                 "Packages/kr.needon.modular-auto-closet/Resource/ClosetIcon.png");
@@ -184,10 +189,20 @@ namespace needon.Editor
                 menuItem.Control ??= new VRCExpressionsMenu.Control();
                 menuItem.Control.type = VRCExpressionsMenu.Control.ControlType.Toggle;
                 menuItem.Control.parameter = new VRCExpressionsMenu.Control.Parameter { name = uniqueName };
+                menuItem.Control.value = 0;
                 menuItem.Control.icon = closetIcon;
             }
 
+            // 빌드시 자동 재계산 로직 유지
             RecalculateClosetChildren(closetParent, uniqueName);
+
+            // ↓↓ 에디터 상에선 무조건 0으로 덮어쓰기 ↓↓
+            foreach (Transform child in closetParent.transform)
+            {
+                var mi = child.GetComponent<ModularAvatarMenuItem>();
+                if (mi?.Control != null)
+                    mi.Control.value = 0;
+            }
         }
 
         private static GameObject FindClosetParent(GameObject obj)
