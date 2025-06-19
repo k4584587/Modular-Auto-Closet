@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Linq;
 using UnityEditor;
-using UnityEditor.Animations;
 using UnityEngine;
 using nadena.dev.modular_avatar.core;
 using VRC.SDK3.Avatars.Components;
@@ -51,12 +50,10 @@ namespace needon.Editor
             rootItem.MenuSource = SubmenuSource.Children;
             rootItem.Control.icon = icon;
 
-            // Avatar Descriptor 및 FX Controller 가져오기
+            // Avatar Descriptor 가져오기
             var avatarRoot = FindAvatarRoot(toggleRoot.transform)
                 ?? throw new Exception("VRCAvatarDescriptor를 찾을 수 없습니다.");
             var avatarDescriptor = avatarRoot.GetComponent<VRCAvatarDescriptor>();
-            var fxController = AutoClosetUtil.GetAvatarFxAnimator(avatarDescriptor) as AnimatorController
-                                ?? throw new Exception("FX Animator Controller를 가져올 수 없습니다.");
 
             // 선택된 각 오브젝트에 대해 Toggle 생성 및 애니메이션 설정
             foreach (var obj in selectedObjects)
@@ -96,34 +93,11 @@ namespace needon.Editor
                     childItem.Control.icon = icon;
                 }
 
-                // FX Controller에 파라미터와 레이어 추가
-                AutoClosetUtil.AddAnimatorParameter(fxController, paramName, AnimatorControllerParameterType.Bool);
-                AutoClosetUtil.ApplyCreateAnimatorLayer(fxController, paramName);
-
-                // On/Off 애니메이션 클립 생성
-                var onClip  = AutoClosetUtil.CreateToggleAnimationClip(obj,      paramName, obj.name, true);
-                var offClip = AutoClosetUtil.CreateToggleAnimationClip(obj,      paramName, obj.name, false);
-
-                var layer = fxController.layers.Last();
-                var sm    = layer.stateMachine;
-
-                var stateOff = sm.AddState($"{paramName}_Off");
-                stateOff.motion = offClip;
-
-                var stateOn = sm.AddState($"{paramName}_On");
-                stateOn.motion = onClip;
-
-                var tOn = stateOff.AddTransition(stateOn);
-                tOn.AddCondition(AnimatorConditionMode.If,    0, paramName);
-                tOn.hasExitTime = false;
-
-                var tOff = stateOn.AddTransition(stateOff);
-                tOff.AddCondition(AnimatorConditionMode.IfNot, 0, paramName);
-                tOff.hasExitTime = false;
+                // 빌드 파스에서 애니메이션을 생성하도록 데이터만 설정
+                // (Animator 컨트롤러와 클립은 생성하지 않음)
             }
 
-            AssetDatabase.SaveAssets();
-            Debug.Log("비파괴 토글 애니메이션 생성 완료");
+            Debug.Log("비파괴 토글 생성 완료");
         }
 
         private static Transform FindAvatarRoot(Transform t)
