@@ -84,6 +84,7 @@ namespace needon.Editor
 
             maMenuItem.Control ??= new VRCExpressionsMenu.Control();
             maMenuItem.Control.type = VRCExpressionsMenu.Control.ControlType.SubMenu;
+            maMenuItem.Control.value = 0;
             maMenuItem.MenuSource = SubmenuSource.Children;
             maMenuItem.Control.icon = icon;
         }
@@ -108,7 +109,7 @@ namespace needon.Editor
                 {
                     name = uniqueName
                 };
-                childMenuItem.Control.value = i;
+                childMenuItem.Control.value = 0;
                 childMenuItem.Control.icon = icon;
 
                 // Blendshape 및 Toggle 컴포넌트 추가 (중복 방지)
@@ -184,6 +185,7 @@ namespace needon.Editor
                 menuItem.Control ??= new VRCExpressionsMenu.Control();
                 menuItem.Control.type = VRCExpressionsMenu.Control.ControlType.Toggle;
                 menuItem.Control.parameter = new VRCExpressionsMenu.Control.Parameter { name = uniqueName };
+                menuItem.Control.value = 0;
                 menuItem.Control.icon = closetIcon;
             }
 
