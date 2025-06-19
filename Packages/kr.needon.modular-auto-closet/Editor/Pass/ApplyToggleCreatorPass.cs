@@ -19,8 +19,8 @@ namespace needon.Editor.Pass
                 throw new InvalidOperationException("Cannot find FX Animator Controller.");
             }
 
-            // 모든 ModularAvatarObjectToggle 컴포넌트를 찾음
-            var toggles = avatar.GetComponentsInChildren<ModularAvatarObjectToggle>(true);
+            // 새 AutoClosetObjectToggle 컴포넌트를 모두 찾음
+            var toggles = avatar.GetComponentsInChildren<AutoClosetObjectToggle>(true);
             foreach (var toggle in toggles)
             {
                 var menu = toggle.GetComponent<ModularAvatarMenuItem>();
@@ -29,10 +29,8 @@ namespace needon.Editor.Pass
                 var paramName = menu.Control.parameter.name;
                 if (string.IsNullOrEmpty(paramName)) continue;
 
-                if (toggle.Objects == null || toggle.Objects.Count == 0) continue;
-                var objRef = toggle.Objects[0].Object;
-                if (objRef == null) continue;
-                var target = avatar.transform.Find(objRef.referencePath)?.gameObject;
+                if (toggle.targets == null || toggle.targets.Length == 0) continue;
+                var target = toggle.targets[0].target;
                 if (target == null) continue;
 
                 AutoClosetUtil.AddAnimatorParameter(fxController, paramName, AnimatorControllerParameterType.Bool);

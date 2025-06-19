@@ -78,13 +78,15 @@ namespace needon.Editor
                     var itemGO = new GameObject(paramName);
                     itemGO.transform.SetParent(toggleRoot.transform, false);
 
-                    var toggleComp = itemGO.AddComponent<ModularAvatarObjectToggle>();
-                    var path = GetRelativePath(obj.transform, avatarRoot);
-                    toggleComp.Objects.Add(new ToggledObject
+                    var toggleComp = itemGO.AddComponent<AutoClosetObjectToggle>();
+                    toggleComp.targets = new[]
                     {
-                        Object = new AvatarObjectReference { referencePath = path },
-                        Active = true
-                    });
+                        new AutoClosetToggleTarget
+                        {
+                            target = obj,
+                            active = true
+                        }
+                    };
 
                     var childItem = itemGO.AddComponent<ModularAvatarMenuItem>();
                     childItem.Control ??= new VRCExpressionsMenu.Control();
@@ -111,17 +113,7 @@ namespace needon.Editor
             return null;
         }
 
-        private static string GetRelativePath(Transform target, Transform root)
-        {
-            if (target == root) return string.Empty;
-            var path = target.name;
-            var current = target.parent;
-            while (current != null && current != root)
-            {
-                path = current.name + "/" + path;
-                current = current.parent;
-            }
-            return path;
-        }
+        // 기존 ModularAvatarObjectToggle과 달리 GameObject 참조를 그대로 저장하므로
+        // 상대 경로 계산 메서드는 더 이상 필요하지 않음.
     }
 }
