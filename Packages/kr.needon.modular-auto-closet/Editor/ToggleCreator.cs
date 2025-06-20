@@ -23,16 +23,20 @@ namespace needon.Editor
             if (selectedObjects.Length == 0) return;
 
             // 옷장 루트 찾기 (상위에서, 없으면 씬 전체)
-            var closetRoot = FindClosetRoot(selectedObjects[0].transform)
-                             ?? GameObject.FindObjectOfType<AutoCloset>()?.transform;
+            var closetRoot = FindClosetRoot(selectedObjects[0].transform) ?? GameObject.FindObjectOfType<AutoCloset>()?.transform;
             if (closetRoot == null)
                 throw new Exception("AutoCloset 컴포넌트가 붙어있는 옷장 루트를 찾을 수 없습니다.");
 
-            // Toggle 루트 생성/조회
-            var toggleRootObj = closetRoot.Find("Toggle")?.gameObject;
+            // Toggle 루트 생성/조회 (AutoCloset 설정 사용)
+            var closetComponent = closetRoot.GetComponent<AutoCloset>();
+            var rootName = closetComponent != null && !string.IsNullOrEmpty(closetComponent.toggleRootName)
+                ? closetComponent.toggleRootName
+                : "Toggle";
+
+            var toggleRootObj = closetRoot.Find(rootName)?.gameObject;
             if (toggleRootObj == null)
             {
-                toggleRootObj = new GameObject("Toggle");
+                toggleRootObj = new GameObject(rootName);
                 toggleRootObj.transform.SetParent(closetRoot, false);
             }
 
@@ -41,8 +45,7 @@ namespace needon.Editor
                 "Packages/kr.needon.modular-auto-closet/Resource/toggleON.png");
 
             // Root 메뉴 항목 셋업
-            var rootItem = toggleRootObj.GetComponent<ModularAvatarMenuItem>()
-                           ?? toggleRootObj.AddComponent<ModularAvatarMenuItem>();
+            var rootItem = toggleRootObj.GetComponent<ModularAvatarMenuItem>() ?? toggleRootObj.AddComponent<ModularAvatarMenuItem>();
             rootItem.Control    ??= new VRCExpressionsMenu.Control();
             rootItem.Control.type      = VRCExpressionsMenu.Control.ControlType.SubMenu;
             rootItem.MenuSource        = SubmenuSource.Children;
@@ -164,8 +167,7 @@ namespace needon.Editor
             }
 
             // 파라미터 컴포넌트는 오직 하나만 유지
-            var parameters = groupGO.GetComponent<ModularAvatarParameters>()
-                             ?? groupGO.AddComponent<ModularAvatarParameters>();
+            var parameters = groupGO.GetComponent<ModularAvatarParameters>() ?? groupGO.AddComponent<ModularAvatarParameters>();
             parameters.parameters.Clear();
             parameters.parameters.Add(new ParameterConfig
             {
