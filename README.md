@@ -10,6 +10,10 @@
 
 https://github.com/user-attachments/assets/3a674f0f-50e2-43c8-8594-24d8f0610ba1
 
+## Usage
+Drag a clothing object into an `AutoCloset` in the hierarchy and the tool will
+prompt to automatically configure it.
+
 ## References
 1. [https://github.com/bdunderscore/modular-avatar](https://github.com/bdunderscore/modular-avatar)
 2. [https://github.com/bdunderscore/ndmf](https://github.com/bdunderscore/ndmf)
