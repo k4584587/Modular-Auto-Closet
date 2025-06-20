@@ -10,6 +10,13 @@
 
 https://github.com/user-attachments/assets/3a674f0f-50e2-43c8-8594-24d8f0610ba1
 
+## Toggle Creator
+
+Use **GameObject → Hirami → Add Create Toggle** to generate toggle objects.
+Each created toggle includes a **BlendshapeToggle** component where you can add
+shapekeys. Set each item to ON or OFF to control whether its value is applied in
+the On or Off animation clip.
+
 ## References
 1. [https://github.com/bdunderscore/modular-avatar](https://github.com/bdunderscore/modular-avatar)
 2. [https://github.com/bdunderscore/ndmf](https://github.com/bdunderscore/ndmf)

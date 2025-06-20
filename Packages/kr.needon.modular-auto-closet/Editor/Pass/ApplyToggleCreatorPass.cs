@@ -69,6 +69,29 @@ namespace needon.Editor.Pass
                     }
                 }
 
+                // Blendshape toggle curves
+                var bsToggle = toggle.GetComponent<BlendshapeToggle>();
+                if (bsToggle != null && bsToggle.shapes != null)
+                {
+                    foreach (var item in bsToggle.shapes)
+                    {
+                        if (item == null || item.mesh == null) continue;
+
+                        var path = GetRelativePath(item.mesh.transform, avatar.transform);
+                        var binding = EditorCurveBinding.FloatCurve(
+                            path,
+                            typeof(SkinnedMeshRenderer),
+                            $"blendShape.{item.shapeKey}"
+                        );
+
+                        var curveOn = new AnimationCurve(new Keyframe(0f, item.active ? item.value : 0f));
+                        var curveOff = new AnimationCurve(new Keyframe(0f, item.active ? 0f : item.value));
+
+                        AnimationUtility.SetEditorCurve(onClip, binding, curveOn);
+                        AnimationUtility.SetEditorCurve(offClip, binding, curveOff);
+                    }
+                }
+
                 // 상태와 트랜지션 생성
                 AddStates(sm, paramName, onClip, offClip);
             }
@@ -103,6 +126,22 @@ namespace needon.Editor.Pass
             var tOff = stateOn.AddTransition(stateOff);
             tOff.AddCondition(AnimatorConditionMode.IfNot, 0, paramName);
             tOff.hasExitTime = false;
+        }
+
+        private static string GetRelativePath(Transform target, Transform root)
+        {
+            if (target == root) return "";
+
+            var path = target.name;
+            var current = target.parent;
+
+            while (current != null && current != root)
+            {
+                path = current.name + "/" + path;
+                current = current.parent;
+            }
+
+            return path;
         }
     }
 }
