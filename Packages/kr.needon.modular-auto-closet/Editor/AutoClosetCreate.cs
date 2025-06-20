@@ -132,9 +132,13 @@ namespace needon.Editor
         }
 
         [MenuItem("GameObject/Hirami/Add Closet", false, ContextMenuPriority)]
-        private static void AddClosetToClothing()
+        private static void MenuAddClosetToClothing()
         {
-            var selected = Selection.activeGameObject;
+            AddClosetToClothing(Selection.activeGameObject);
+        }
+
+        internal static void AddClosetToClothing(GameObject selected)
+        {
             if (selected == null)
                 return;
 
