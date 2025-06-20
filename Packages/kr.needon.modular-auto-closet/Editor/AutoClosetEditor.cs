@@ -96,6 +96,8 @@ namespace needon.Editor
                 return;
             }
 
+            EditorGUILayout.PropertyField(_autoCloset.FindProperty("toggleRootName"), new GUIContent("Toggle Root Name"));
+
             _autoCloset.ApplyModifiedProperties();
 
             GUILayout.FlexibleSpace();

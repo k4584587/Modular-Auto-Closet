@@ -28,11 +28,16 @@ namespace needon.Editor
             if (closetRoot == null)
                 throw new Exception("AutoCloset 컴포넌트가 붙어있는 옷장 루트를 찾을 수 없습니다.");
 
-            // Toggle 루트 생성/조회
-            var toggleRootObj = closetRoot.Find("Toggle")?.gameObject;
+            // Toggle 루트 생성/조회 (AutoCloset 설정 사용)
+            var closetComponent = closetRoot.GetComponent<AutoCloset>();
+            var rootName = closetComponent != null && !string.IsNullOrEmpty(closetComponent.toggleRootName)
+                ? closetComponent.toggleRootName
+                : "Toggle";
+
+            var toggleRootObj = closetRoot.Find(rootName)?.gameObject;
             if (toggleRootObj == null)
             {
-                toggleRootObj = new GameObject("Toggle");
+                toggleRootObj = new GameObject(rootName);
                 toggleRootObj.transform.SetParent(closetRoot, false);
             }
 

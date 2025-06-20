@@ -10,6 +10,11 @@
 
 https://github.com/user-attachments/assets/3a674f0f-50e2-43c8-8594-24d8f0610ba1
 
+### Custom Toggle Root Name
+The **AutoCloset** component now exposes a **Toggle Root Name** field. When
+creating toggles, the tool will create or find a child object with this name
+instead of the default `Toggle`.
+
 ## References
 1. [https://github.com/bdunderscore/modular-avatar](https://github.com/bdunderscore/modular-avatar)
 2. [https://github.com/bdunderscore/ndmf](https://github.com/bdunderscore/ndmf)
