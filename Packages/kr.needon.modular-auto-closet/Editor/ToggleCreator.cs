@@ -81,6 +81,9 @@ namespace needon.Editor
                     new AutoClosetToggleTarget { target = obj, active = true }
                 };
 
+                // Blendshape toggle component for additional shapekey curves
+                itemGO.AddComponent<BlendshapeToggle>();
+
                 var menuItem = itemGO.AddComponent<ModularAvatarMenuItem>();
                 menuItem.Control    ??= new VRCExpressionsMenu.Control();
                 menuItem.Control.type      = VRCExpressionsMenu.Control.ControlType.Toggle;
@@ -90,6 +93,9 @@ namespace needon.Editor
             else
             {
                 itemGO = existingGO.gameObject;
+                // ensure BlendshapeToggle exists when reusing
+                if (itemGO.GetComponent<BlendshapeToggle>() == null)
+                    itemGO.AddComponent<BlendshapeToggle>();
             }
 
             var parameters = itemGO.GetComponent<ModularAvatarParameters>()
@@ -128,6 +134,9 @@ namespace needon.Editor
                     .Select(o => new AutoClosetToggleTarget { target = o, active = true })
                     .ToArray();
 
+                // Blendshape toggle component for shapekey animations
+                groupGO.AddComponent<BlendshapeToggle>();
+
                 // 메뉴 아이템 & 파라미터 이름(UUID 포함) 설정
                 menuItem = groupGO.AddComponent<ModularAvatarMenuItem>();
                 menuItem.Control    ??= new VRCExpressionsMenu.Control();
@@ -143,6 +152,9 @@ namespace needon.Editor
                 groupGO = existingGO.gameObject;
                 menuItem = groupGO.GetComponent<ModularAvatarMenuItem>();
                 paramName = menuItem.Control.parameter?.name ?? groupName;
+
+                if (groupGO.GetComponent<BlendshapeToggle>() == null)
+                    groupGO.AddComponent<BlendshapeToggle>();
 
                 // targets 업데이트
                 var toggleComp = groupGO.GetComponent<AutoClosetObjectToggle>();
