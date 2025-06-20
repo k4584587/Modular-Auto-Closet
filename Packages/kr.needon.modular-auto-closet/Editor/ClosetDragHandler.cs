@@ -60,8 +60,8 @@ namespace needon.Editor
                                 "옷장 추가 / Add Closet",
                                 $"새로운 옷 '{child.name}'을 옷장에 추가하시겠습니까?\n" +
                                 $"Would you like to add the new clothing item '{child.name}' to the closet?",
-                                "예 / Yes",
-                                "아니요 / No"))
+                                "Yes",
+                                "No"))
                         {
                             AutoClosetCreate.AddClosetToClothing(child.gameObject);
                         }
