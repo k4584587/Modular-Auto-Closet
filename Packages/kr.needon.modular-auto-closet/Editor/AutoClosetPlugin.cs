@@ -15,7 +15,9 @@ namespace needon.Editor
         {
             InPhase(BuildPhase.Generating)
                 .WithRequiredExtension(typeof(AutoClosetContext), s =>
-                    s.Run(ApplyAutoClosetPass.Instance).Then.Run(ApplyToggleCreatorPass.Instance));
+                    s.Run(ApplyAutoClosetPass.Instance)
+                     .Then.Run(ApplyToggleCreatorPass.Instance)
+                     .Then.Run(ApplyStandaloneTogglePass.Instance));
         }
     }   
 }
