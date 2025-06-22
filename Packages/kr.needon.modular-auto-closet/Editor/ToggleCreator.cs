@@ -14,7 +14,12 @@ namespace needon.Editor
         private const int Priority = 1;
 
         [MenuItem(ToggleMenuPath, true, Priority)]
-        private static bool ValidateCreateToggle() => Selection.gameObjects.Length > 0;
+        private static bool ValidateCreateToggle()
+        {
+            var selectedObjects = Selection.gameObjects;
+            // 필터링: AutoCloset 컴포넌트가 붙어있는 객체는 메뉴 비활성화
+            return selectedObjects.Length > 0 && selectedObjects.All(go => go.GetComponent<AutoCloset>() == null);
+        }
 
         [MenuItem(ToggleMenuPath, false, Priority)]
         private static void CreateToggle()
