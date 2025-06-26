@@ -20,11 +20,10 @@ namespace needon.Editor.Pass
             var toggles = avatar.GetComponentsInChildren<StandaloneToggle>(true);
             foreach (var toggle in toggles)
             {
-                var targets = toggle.targets?
-                    .Where(t => t != null && t.target != null)
-                    .Select(t => t.target)
+                var items = toggle.targets?
+                    .Where(i => i != null && i.target != null)
                     .ToArray();
-                if (targets == null || targets.Length == 0) continue;
+                if (items == null || items.Length == 0) continue;
 
                 var paramName = "StandaloneToggle_" + Guid.NewGuid().ToString("N").Substring(0, 8);
 
@@ -37,10 +36,11 @@ namespace needon.Editor.Pass
                 var onClip = new AnimationClip { name = $"{paramName}_On" };
                 var offClip = new AnimationClip { name = $"{paramName}_Off" };
 
-                foreach (var target in targets)
+                foreach (var item in items)
                 {
-                    var clipOn = AutoClosetUtil.CreateToggleAnimationClip(target, paramName, target.name, true);
-                    var clipOff = AutoClosetUtil.CreateToggleAnimationClip(target, paramName, target.name, false);
+                    var target = item.target;
+                    var clipOn = AutoClosetUtil.CreateToggleAnimationClip(target, paramName, target.name, item.active);
+                    var clipOff = AutoClosetUtil.CreateToggleAnimationClip(target, paramName, target.name, !item.active);
                     MergeClip(onClip, clipOn);
                     MergeClip(offClip, clipOff);
                 }
