@@ -132,28 +132,31 @@ namespace needon.Editor.Pass
 
                 AnimationUtility.SetEditorCurve(clip, binding, curve);
 
-                // 추가 ClosetToggle 컴포넌트 처리
-                var closetToggle = child.GetComponent<ClosetToggle>();
-                if (closetToggle != null && closetToggle.toggles != null)
+                // 추가 ClosetToggle 컴포넌트 처리 - 현재 활성화된 옷의 설정만 적용
+                if (isActive)
                 {
-                    foreach (var toggle in closetToggle.toggles)
+                    var closetToggle = child.GetComponent<ClosetToggle>();
+                    if (closetToggle != null && closetToggle.toggles != null)
                     {
-                        if (toggle == null || toggle.target == null) continue;
+                        foreach (var toggle in closetToggle.toggles)
+                        {
+                            if (toggle == null || toggle.target == null) continue;
 
-                        var toggleCurve = new AnimationCurve(
-                            new Keyframe(0f, isActive ? (toggle.active ? 1f : 0f) : (toggle.active ? 0f : 1f))
-                        );
+                            var toggleCurve = new AnimationCurve(
+                                new Keyframe(0f, toggle.active ? 1f : 0f)
+                            );
 
-                        var togglePath = GetRelativePath(toggle.target.transform, avatarRoot);
-                        Debug.Log($"Toggle path: {togglePath} (Active: {isActive})");
+                            var togglePath = GetRelativePath(toggle.target.transform, avatarRoot);
+                            Debug.Log($"Toggle path: {togglePath} (Active: {toggle.active})");
 
-                        var toggleBinding = EditorCurveBinding.FloatCurve(
-                            togglePath,
-                            typeof(GameObject),
-                            "m_IsActive"
-                        );
+                            var toggleBinding = EditorCurveBinding.FloatCurve(
+                                togglePath,
+                                typeof(GameObject),
+                                "m_IsActive"
+                            );
 
-                        AnimationUtility.SetEditorCurve(clip, toggleBinding, toggleCurve);
+                            AnimationUtility.SetEditorCurve(clip, toggleBinding, toggleCurve);
+                        }
                     }
                 }
 
