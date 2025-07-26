@@ -1,5 +1,6 @@
 ﻿#if UNITY_EDITOR
 using System;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using nadena.dev.modular_avatar.core;
@@ -46,100 +47,78 @@ namespace needon.Editor.Pass
     [CustomPropertyDrawer(typeof(ClosetBlendshapeItem))]
     public class ClosetBlendshapeItemDrawer : PropertyDrawer
     {
-        private const float DropdownWidth = 100f;
-        private const float ValueWidth    = 50f;
-        private const float SpacingX      = 4f;
-        private const float SpacingY      = 2f;
-
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
-            position.y += SpacingY * 0.5f;
-            position.height -= SpacingY;
-
             EditorGUI.BeginProperty(position, label, property);
-            DrawFields(position, property);
+
+            // 박스 스타일로 감싸기 (Rect 직접 계산)
+            var boxRect = new Rect(position.x, position.y, position.width, position.height);
+            GUI.Box(boxRect, GUIContent.none, GUI.skin.box);
+
+            // 내부 패딩
+            float padding = 4f;
+            float lineHeight = EditorGUIUtility.singleLineHeight;
+            float y = position.y + padding;
+            float fieldSpacing = 2f;
+
+            // Skinned Mesh 필드
+            var meshProp = property.FindPropertyRelative("mesh");
+            var shapeKeyProp = property.FindPropertyRelative("shapeKey");
+            var valueProp = property.FindPropertyRelative("value");
+
+            if (meshProp == null || shapeKeyProp == null || valueProp == null)
+            {
+                EditorGUI.HelpBox(new Rect(position.x + padding, y, position.width - 2 * padding, lineHeight * 2), "ClosetBlendshapeItem 필드 오류", MessageType.Error);
+                EditorGUI.EndProperty();
+                return;
+            }
+
+            EditorGUI.PropertyField(new Rect(position.x + padding, y, position.width - 2 * padding, lineHeight), meshProp, new GUIContent("Skinned Mesh"));
+            y += lineHeight + fieldSpacing;
+
+            // ShapeKey 드롭다운
+            SkinnedMeshRenderer smr = meshProp.objectReferenceValue as SkinnedMeshRenderer;
+            if (smr != null && smr.sharedMesh != null)
+            {
+                var names = new System.Collections.Generic.List<string> { "Please select" };
+                names.AddRange(System.Linq.Enumerable.Range(0, smr.sharedMesh.blendShapeCount)
+                                         .Select(idx => smr.sharedMesh.GetBlendShapeName(idx)));
+
+                int selIndex = Mathf.Max(0, names.IndexOf(shapeKeyProp.stringValue));
+                selIndex = EditorGUI.Popup(new Rect(position.x + padding, y, position.width - 2 * padding, lineHeight), "Name", selIndex, names.ToArray());
+                shapeKeyProp.stringValue = names[selIndex];
+                y += lineHeight + fieldSpacing;
+
+                bool selectable = shapeKeyProp.stringValue != "Please select";
+                EditorGUI.BeginDisabledGroup(!selectable);
+                valueProp.floatValue = selectable
+                    ? EditorGUI.Slider(new Rect(position.x + padding, y, position.width - 2 * padding, lineHeight), "Value", valueProp.floatValue, 0f, 100f)
+                    : EditorGUI.Slider(new Rect(position.x + padding, y, position.width - 2 * padding, lineHeight), "Value", 0f, 0f, 100f);
+                EditorGUI.EndDisabledGroup();
+                y += lineHeight + fieldSpacing;
+            }
+            else
+            {
+                EditorGUI.LabelField(new Rect(position.x + padding, y, position.width - 2 * padding, lineHeight), "Name", "Please select a Skinned Mesh");
+                y += lineHeight + fieldSpacing;
+                shapeKeyProp.stringValue = "Please select";
+                EditorGUI.BeginDisabledGroup(true);
+                EditorGUI.Slider(new Rect(position.x + padding, y, position.width - 2 * padding, lineHeight), "Value", 0f, 0f, 100f);
+                EditorGUI.EndDisabledGroup();
+                y += lineHeight + fieldSpacing;
+            }
+
             EditorGUI.EndProperty();
         }
 
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
-            float baseHeight = EditorGUI.GetPropertyHeight(
-                property.FindPropertyRelative("mesh"), label
-            );
-            return baseHeight + SpacingY;
-        }
-
-        private void DrawFields(Rect position, SerializedProperty property)
-        {
-            int originalIndent = EditorGUI.indentLevel;
-            EditorGUI.indentLevel = 0;
-
-            var meshProp     = property.FindPropertyRelative("mesh");
-            var shapeKeyProp = property.FindPropertyRelative("shapeKey");
-            var valueProp    = property.FindPropertyRelative("value");
-
-            if (meshProp == null || shapeKeyProp == null || valueProp == null)
-            {
-                EditorGUI.LabelField(position, "ClosetBlendshapeItem 필드 오류");
-                return;
-            }
-
-            Rect meshRect = new Rect(
-                position.x,
-                position.y,
-                position.width - DropdownWidth - ValueWidth - SpacingX * 2,
-                position.height
-            );
-            Rect dropdownRect = new Rect(
-                position.x + position.width - DropdownWidth - ValueWidth - SpacingX,
-                position.y,
-                DropdownWidth,
-                position.height
-            );
-            Rect valueRect = new Rect(
-                position.x + position.width - ValueWidth,
-                position.y,
-                ValueWidth,
-                position.height
-            );
-
-            // SkinnedMeshRenderer 필드: 타입 라벨 없이 오브젝트만 표시
-            var currentObj = meshProp.objectReferenceValue as SkinnedMeshRenderer;
-            var newObj = (SkinnedMeshRenderer)EditorGUI.ObjectField(
-                meshRect,
-                GUIContent.none,
-                currentObj,
-                typeof(SkinnedMeshRenderer),
-                true
-            );
-            meshProp.objectReferenceValue = newObj;
-
-            // BlendShape 키 목록 구성
-            SkinnedMeshRenderer smr = newObj;
-            string[] options = { "(none)" };
-            int current = 0;
-            if (smr != null && smr.sharedMesh != null)
-            {
-                Mesh mesh = smr.sharedMesh;
-                int count = mesh.blendShapeCount;
-                options = new string[count + 1];
-                options[0] = "(none)";
-                for (int i = 0; i < count; i++)
-                {
-                    options[i + 1] = mesh.GetBlendShapeName(i);
-                }
-                string currentKey = shapeKeyProp.stringValue;
-                current = Array.IndexOf(options, currentKey);
-                if (current < 0) current = 0;
-            }
-
-            int choice = EditorGUI.Popup(dropdownRect, current, options);
-            shapeKeyProp.stringValue = (choice > 0) ? options[choice] : string.Empty;
-
-            // 값 필드
-            valueProp.floatValue = EditorGUI.FloatField(valueRect, GUIContent.none, valueProp.floatValue);
-
-            EditorGUI.indentLevel = originalIndent;
+            // Skinned Mesh + Name + Value + 패딩/스페이싱
+            float lineHeight = EditorGUIUtility.singleLineHeight;
+            float fieldSpacing = 2f;
+            float padding = 4f;
+            // 항상 3줄 (Skinned Mesh, Name, Value)
+            return padding + (lineHeight + fieldSpacing) * 3 + padding;
         }
     }
 }

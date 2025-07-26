@@ -138,7 +138,7 @@ namespace needon.Editor.Pass
             int choice = EditorGUI.Popup(dropdownRect, current, options);
             shapeKeyProp.stringValue = (choice > 0) ? options[choice] : string.Empty;
 
-            valueProp.floatValue = EditorGUI.FloatField(valueRect, GUIContent.none, valueProp.floatValue);
+            valueProp.floatValue = EditorGUI.Slider(valueRect, GUIContent.none, valueProp.floatValue, 0f, 100f);
 
             string[] popupOptions = { "ON", "OFF" };
             int currentPopup = activeProp.boolValue ? 0 : 1;
