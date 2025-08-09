@@ -25,10 +25,25 @@ namespace needon.Editor.Pass
                     .ToArray();
                 if (items == null || items.Length == 0) continue;
 
-                var paramName = "StandaloneToggle_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                // Reuse existing parameter if this toggle is paired with a menu item
+                var menuItem = toggle.GetComponent<ModularAvatarMenuItem>();
+                var paramName = menuItem?.Control?.parameter?.name;
+                string layerName;
+
+                if (string.IsNullOrEmpty(paramName))
+                {
+                    // No menu/parameter found – create a fresh parameter and layer
+                    paramName = "StandaloneToggle_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                    layerName = paramName;
+                }
+                else
+                {
+                    // Reuse parameter but give layer a distinct name to avoid clashes
+                    layerName = paramName + "_Standalone";
+                }
 
                 AutoClosetUtil.AddAnimatorParameter(fxController, paramName, AnimatorControllerParameterType.Bool);
-                AutoClosetUtil.ApplyCreateAnimatorLayer(fxController, paramName);
+                AutoClosetUtil.ApplyCreateAnimatorLayer(fxController, layerName);
 
                 var layer = fxController.layers.Last();
                 var sm = layer.stateMachine;
@@ -68,6 +83,8 @@ namespace needon.Editor.Pass
 
             var stateOn = sm.AddState($"{paramName}_On");
             stateOn.motion = onClip;
+
+            sm.defaultState = stateOff;
 
             var tOn = stateOff.AddTransition(stateOn);
             tOn.AddCondition(AnimatorConditionMode.If, 0, paramName);
