@@ -60,11 +60,11 @@ namespace needon.Editor.Pass
                     foreach (var target in targets)
                     {
                         // 각각의 개별 클립 생성
-                        var clipOn  = AutoClosetUtil.CreateToggleAnimationClip(target, paramName, target.name, true);
+                        var clipOn = AutoClosetUtil.CreateToggleAnimationClip(target, paramName, target.name, true);
                         var clipOff = AutoClosetUtil.CreateToggleAnimationClip(target, paramName, target.name, false);
 
                         // 머지 유틸로 곡선 합치기
-                        MergeClip(onClip,  clipOn);
+                        MergeClip(onClip, clipOn);
                         MergeClip(offClip, clipOff);
                     }
                 }
@@ -110,7 +110,7 @@ namespace needon.Editor.Pass
             }
         }
 
-        // Off/On 상태와 파라미터 기반 전환을 추가합니다.
+// Off/On 상태와 파라미터 기반 전환을 추가합니다.
         private static void AddStates(AnimatorStateMachine sm, string paramName, AnimationClip onClip, AnimationClip offClip)
         {
             var stateOff = sm.AddState($"{paramName}_Off");
@@ -119,14 +119,36 @@ namespace needon.Editor.Pass
             var stateOn = sm.AddState($"{paramName}_On");
             stateOn.motion = onClip;
 
+            // Off -> On
             var tOn = stateOff.AddTransition(stateOn);
             tOn.AddCondition(AnimatorConditionMode.If, 0, paramName);
-            tOn.hasExitTime = false;
+            MakeInstant(tOn);
 
+            // On -> Off
             var tOff = stateOn.AddTransition(stateOff);
             tOff.AddCondition(AnimatorConditionMode.IfNot, 0, paramName);
-            tOff.hasExitTime = false;
+            MakeInstant(tOff);
+
+            // 혹시 중복 전이가 생겼다면 모두 0초로 통일
+            foreach (var tr in stateOff.transitions.Where(x => x.destinationState == stateOn)) MakeInstant(tr);
+            foreach (var tr in stateOn.transitions.Where(x => x.destinationState == stateOff)) MakeInstant(tr);
         }
+
+        private static void MakeInstant(AnimatorStateTransition t)
+        {
+            t.hasExitTime = false;
+            t.exitTime = 0f;
+            t.hasFixedDuration = true; // Transition Duration (s) 모드
+            t.duration = 0f; // 0초 전환
+            t.offset = 0f;
+
+            // 선택(깔끔하게)
+            t.orderedInterruption = false;
+            t.interruptionSource = TransitionInterruptionSource.None;
+
+            EditorUtility.SetDirty(t); // 인스펙터에 값 고정 반영
+        }
+
 
         private static string GetRelativePath(Transform target, Transform root)
         {
