@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿#if UNITY_EDITOR
+using System.Collections.Generic;
 using System.Linq;
 using nadena.dev.modular_avatar.core;
 using UnityEditor;
@@ -120,7 +121,8 @@ namespace needon.Editor
             }
         }
 
-        [MenuItem("GameObject/Hirami/Add Closet", true, ContextMenuPriority)]
+        // (수정된 부분) 아래 [MenuItem] 두 줄을 주석 처리하여 메뉴가 나타나지 않도록 함
+        // [MenuItem("GameObject/Hirami/Add Closet", true, ContextMenuPriority)]
         private static bool ValidateAddClosetToClothing()
         {
             var selected = Selection.activeGameObject;
@@ -131,7 +133,8 @@ namespace needon.Editor
             return FindClosetParent(selected) != null;
         }
 
-        [MenuItem("GameObject/Hirami/Add Closet", false, ContextMenuPriority)]
+        // (수정된 부분) 아래 [MenuItem] 한 줄을 주석 처리하여 메뉴가 나타나지 않도록 함
+        // [MenuItem("GameObject/Hirami/Add Closet", false, ContextMenuPriority)]
         private static void MenuAddClosetToClothing()
         {
             AddClosetToClothing(Selection.activeGameObject);
@@ -237,8 +240,9 @@ namespace needon.Editor
             {
                 var mi = children[i].GetComponent<ModularAvatarMenuItem>();
                 if (mi != null && mi.Control != null)
-                    mi.Control.value = i;
+                    mi.Control.value = i + 1; // 기본값 0과 겹치지 않게 1부터 시작
             }
         }
     }
 }
+#endif
