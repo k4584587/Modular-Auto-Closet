@@ -25,8 +25,8 @@ namespace needon.Editor.Pass
                     throw new InvalidOperationException("Cannot find FX Animator Controller.");
                 }
 
-                // 아바타에 부착된 모든 AutoCloset 컴포넌트를 가져옴
-                var closetComponents = avatar.GetComponentsInChildren<AutoCloset>();
+                // 아바타에 부착된 모든 AutoCloset 컴포넌트를 가져옴 (비활성 포함)
+                var closetComponents = avatar.GetComponentsInChildren<AutoCloset>(true);
                 foreach (var closetComponent in closetComponents)
                 {
                     var closetGameObject = closetComponent.gameObject;

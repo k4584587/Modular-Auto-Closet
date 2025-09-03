@@ -287,10 +287,13 @@ namespace needon.Editor
 
             var path = $"{uniqueDir}/{Sanitize(target.name)}.png";
 
-            if (!overwrite && File.Exists(path))
+            if (!overwrite)
             {
-                AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
-                return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                var existing = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                if (existing != null)
+                {
+                    return existing;
+                }
             }
 
             var tex = CaptureToTexture(target, size, chromaTol, tempLayer);
@@ -359,7 +362,8 @@ namespace needon.Editor
             cam.backgroundColor = Chroma;
             cam.cullingMask = (1 << tempLayer);
             cam.allowMSAA = true;
-            cam.nearClipPlane = -100f;
+            // near clip은 양수의 작은 값으로 설정 (음수 사용 지양)
+            cam.nearClipPlane = 0.01f;
             cam.farClipPlane = 100f;
 
             var ext = bounds.extents;
