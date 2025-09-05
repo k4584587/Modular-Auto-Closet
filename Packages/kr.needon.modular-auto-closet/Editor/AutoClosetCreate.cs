@@ -178,14 +178,14 @@ namespace needon.Editor
     var closetParent = FindClosetParent(selected);
     if (closetParent == null)
     {
-        Debug.LogError("There is no Closet object in the parent of the selected object.");
+        needon.Editor.Util.ClosetLogger.LogError(selected, "Error.NoClosetInParent");
         return;
     }
 
     var maParameters = closetParent.GetComponent<ModularAvatarParameters>();
     if (maParameters == null || maParameters.parameters == null || maParameters.parameters.Count == 0)
     {
-        Debug.LogError("The Closet object does not have ModularAvatarParameters or it has no parameters.");
+        needon.Editor.Util.ClosetLogger.LogError(selected, "Error.NoParameters");
         return;
     }
 
@@ -202,7 +202,7 @@ namespace needon.Editor
 
     if (uniqueName == null)
     {
-        Debug.LogError("Could not find a valid parameter in the Closet object.");
+        needon.Editor.Util.ClosetLogger.LogError(selected, "Error.NoValidParameter");
         return;
     }
 

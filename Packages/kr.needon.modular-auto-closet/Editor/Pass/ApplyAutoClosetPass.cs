@@ -55,7 +55,7 @@ namespace needon.Editor.Pass
             }
             catch (Exception e)
             {
-                Debug.LogError($"Error occurred during AutoCloset processing: {e.Message}");
+                needon.Editor.Util.ClosetLogger.LogError(context.AvatarRootObject, "Log.Apply.Error", e.Message);
                 throw;
             }
         }
@@ -110,7 +110,7 @@ namespace needon.Editor.Pass
         {
             if (closet == null) return false;
             if (closet.transform.childCount != 0) return true;
-            Debug.LogWarning("The closet does not have any child objects.");
+            needon.Editor.Util.ClosetLogger.LogWarning(closet, "Log.Closet.NoChildren");
             return false;
 
         }

@@ -122,7 +122,7 @@ namespace needon.Editor.Pass
 
                 // 아바타 루트로부터의 상대 경로 계산
                 var relativePath = GetRelativePath(child.transform, avatarRoot);
-                Debug.Log($"Setting animation path: {relativePath} (Active: {isActive})");
+                needon.Editor.Util.ClosetLogger.Log(child, "Log.Anim.Path", relativePath, isActive);
 
                 var binding = EditorCurveBinding.FloatCurve(
                     relativePath,
@@ -148,7 +148,7 @@ namespace needon.Editor.Pass
                             );
 
                             var togglePath = GetRelativePath(toggle.target.transform, avatarRoot);
-                            Debug.Log($"Toggle path: {togglePath} (Active: {toggle.active})");
+                            needon.Editor.Util.ClosetLogger.Log(child, "Log.Toggle.Path", togglePath, toggle.active);
 
                             var toggleBinding = EditorCurveBinding.FloatCurve(
                                 togglePath,
@@ -172,7 +172,7 @@ namespace needon.Editor.Pass
                             );
 
                             var bsPath = GetRelativePath(item.mesh.transform, avatarRoot);
-                            Debug.Log($"Blendshape path: {bsPath} (Active: {isActive})");
+                        needon.Editor.Util.ClosetLogger.Log(child, "Log.Blendshape.Path", bsPath, isActive);
 
                             var bsBinding = EditorCurveBinding.FloatCurve(
                                 bsPath,
@@ -201,7 +201,7 @@ namespace needon.Editor.Pass
                                 );
 
                                 var togglePath = GetRelativePath(toggle.target.transform, avatarRoot);
-                                Debug.Log($"Toggle path: {togglePath} (Active: {toggle.active})");
+                                needon.Editor.Util.ClosetLogger.Log(child, "Log.Toggle.Path", togglePath, toggle.active);
 
                                 var toggleBinding = EditorCurveBinding.FloatCurve(
                                     togglePath,
@@ -223,7 +223,7 @@ namespace needon.Editor.Pass
 
                             var bsCurve = new AnimationCurve(new Keyframe(0f, isActive ? item.value : 0f));
                             var bsPath = GetRelativePath(item.mesh.transform, avatarRoot);
-                            Debug.Log($"Blendshape path: {bsPath} (Active: {isActive})");
+                            needon.Editor.Util.ClosetLogger.Log(child, "Log.Blendshape.Path", bsPath, isActive);
                             var bsBinding = EditorCurveBinding.FloatCurve(
                                 bsPath,
                                 typeof(SkinnedMeshRenderer),
@@ -246,7 +246,7 @@ namespace needon.Editor.Pass
             }
 
             AssetDatabase.SaveAssets();
-            Debug.Log($"Animation clip saved at: {clipPath}");
+            needon.Editor.Util.ClosetLogger.Log(closet, "Log.Anim.Saved", clipPath);
             return clip;
         }
 
@@ -295,7 +295,7 @@ namespace needon.Editor.Pass
             // 타겟의 루트(씬 최상위) 기준 상대 경로 계산
             var root = target.transform.root;
             var relativePath = GetRelativePath(target.transform, root);
-            Debug.Log($"[Toggle] Setting path: {relativePath} = {(isOn ? 1f : 0f)}");
+            needon.Editor.Util.ClosetLogger.Log(target, "Log.Toggle.SetPath", relativePath, isOn ? 1f : 0f);
 
             // 단일 키프레임 커브(0초에만 값 기록)
             var curve = new AnimationCurve(new Keyframe(0f, isOn ? 1f : 0f));
@@ -313,7 +313,7 @@ namespace needon.Editor.Pass
                 EditorUtility.SetDirty(clip);
 
             AssetDatabase.SaveAssets();
-            Debug.Log($"Toggle animation clip saved: {clipPath}");
+            needon.Editor.Util.ClosetLogger.Log(target, "Log.Toggle.ClipSaved", clipPath);
             return clip;
         }
 

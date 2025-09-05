@@ -17,8 +17,14 @@ namespace needon.Editor
         private static bool ValidateCreateToggle()
         {
             var selectedObjects = Selection.gameObjects;
-            // 필터링: AutoCloset 컴포넌트가 붙어있는 객체는 메뉴 비활성화
-            return selectedObjects.Length > 0 && selectedObjects.All(go => go.GetComponent<AutoCloset>() == null);
+            if (selectedObjects.Length == 0) return false;
+
+            // 씬 어딘가에 AutoCloset 이 최소 1개 존재해야 함 (비활성 포함)
+            var anyCloset = UnityEngine.Object.FindObjectsOfType<AutoCloset>(true).Length > 0;
+            if (!anyCloset) return false;
+
+            // 선택 자체가 AutoCloset 이면 비활성화 (루트에 직접 생성 방지)
+            return selectedObjects.All(go => go.GetComponent<AutoCloset>() == null);
         }
 
         [MenuItem(ToggleMenuPath, false, Priority)]
@@ -28,7 +34,8 @@ namespace needon.Editor
             if (selectedObjects.Length == 0) return;
 
             // 옷장 루트 찾기 (상위에서, 없으면 씬 전체)
-            var closetRoot = FindClosetRoot(selectedObjects[0].transform) ?? GameObject.FindObjectOfType<AutoCloset>()?.transform;
+            var closetRoot = FindClosetRoot(selectedObjects[0].transform)
+                             ?? UnityEngine.Object.FindObjectOfType<AutoCloset>(true)?.transform;
             if (closetRoot == null)
                 throw new Exception("AutoCloset 컴포넌트가 붙어있는 옷장 루트를 찾을 수 없습니다.");
 
@@ -66,7 +73,7 @@ namespace needon.Editor
                 CreateGroupToggle(selectedObjects, toggleRootObj.transform, icon);
             }
 
-            Debug.Log("비파괴 토글 생성 완료");
+            needon.Editor.Util.ClosetLogger.Log(toggleRootObj, "Log.Toggle.Created");
         }
 
         // 개별 오브젝트용 토글 생성

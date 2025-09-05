@@ -77,14 +77,14 @@ namespace needon.Editor
 
             // Language selector
             GUILayout.Space(6);
-            EditorGUILayout.LabelField(T("Language", "언어", "言語"), EditorStyles.boldLabel);
+            EditorGUILayout.LabelField(needon.Editor.Util.ClosetLocalization.Get(_component, "AutoCloset.Language"), EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(_language, GUIContent.none);
 
             // Ensure within avatar
             if (_component.GetComponentInParent<VRCAvatarDescriptor>() == null)
             {
                 EditorGUILayout.HelpBox(
-                    T("Place this inside the avatar object.", "아바타 오브젝트 내부에 배치해 주세요.", "アバター内に配置してください。"),
+                    needon.Editor.Util.ClosetLocalization.Get(_component, "AutoCloset.PlaceInsideAvatar"),
                     MessageType.Error);
                 return;
             }
@@ -92,7 +92,7 @@ namespace needon.Editor
             // Settings field
             EditorGUILayout.PropertyField(
                 _toggleRootName,
-                new GUIContent(T("Toggle Root Name", "토글 루트 이름", "トグル ルート名")));
+                new GUIContent(needon.Editor.Util.ClosetLocalization.Get(_component, "AutoCloset.ToggleRootName")));
             GUILayout.Space(6);
 
             // Footer link
@@ -115,15 +115,6 @@ namespace needon.Editor
         [System.Serializable]
         private class PackageInfo { public string version; }
 
-        private string T(string en, string ko, string ja)
-        {
-            var lang = (AutoCloset.ClosetLanguage)_language.enumValueIndex;
-            switch (lang)
-            {
-                case AutoCloset.ClosetLanguage.Korean:   return ko;
-                case AutoCloset.ClosetLanguage.Japanese: return ja;
-                default:                                  return en;
-            }
-        }
+        // Title remains English per request; other strings use localization file.
     }
 }
