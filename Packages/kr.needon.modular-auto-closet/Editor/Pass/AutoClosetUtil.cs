@@ -3,6 +3,7 @@ using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
 using VRC.SDK3.Avatars.Components;
+using System.Collections.Generic;
 
 namespace needon.Editor.Pass
 {
@@ -110,6 +111,11 @@ namespace needon.Editor.Pass
             // 아바타 루트 찾기
             var avatarRoot = closet.transform.root;
 
+            // 동일한 SkinnedMeshRenderer/BlendShape 바인딩이 여러 의상에서 설정될 때
+            // 비활성(0) 값이 활성 의상의 값(>0)을 덮어쓰는 문제를 방지하기 위한 집계 맵
+            // key: path|propertyName, value: (binding, curve)
+            var blendshapeCurves = new Dictionary<string, (EditorCurveBinding binding, AnimationCurve curve)>();
+
             // 모든 옷장 자식(옷)의 활성화 상태를 애니메이션으로 기록
             foreach (Transform child in closet.transform)
             {
@@ -167,20 +173,28 @@ namespace needon.Editor.Pass
                         {
                             if (item == null || item.mesh == null) continue;
 
-                            var bsCurve = new AnimationCurve(
-                                new Keyframe(0f, isActive ? item.value : 0f)
-                            );
+                            var value = isActive ? item.value : 0f;
 
                             var bsPath = GetRelativePath(item.mesh.transform, avatarRoot);
-                        needon.Editor.Util.ClosetLogger.Log(child, "Log.Blendshape.Path", bsPath, isActive);
+                            needon.Editor.Util.ClosetLogger.Log(child, "Log.Blendshape.Path", bsPath, isActive);
 
+                            var property = $"blendShape.{item.shapeKey}";
                             var bsBinding = EditorCurveBinding.FloatCurve(
                                 bsPath,
                                 typeof(SkinnedMeshRenderer),
-                                $"blendShape.{item.shapeKey}"
+                                property
                             );
 
-                            AnimationUtility.SetEditorCurve(clip, bsBinding, bsCurve);
+                            var key = bsBinding.path + "|" + bsBinding.propertyName;
+                            if (!blendshapeCurves.ContainsKey(key))
+                            {
+                                blendshapeCurves[key] = (bsBinding, new AnimationCurve(new Keyframe(0f, value)));
+                            }
+                            else if (isActive)
+                            {
+                                // 활성 의상의 값이 최우선이며, 비활성(0) 값으로는 덮어쓰지 않음
+                                blendshapeCurves[key] = (bsBinding, new AnimationCurve(new Keyframe(0f, value)));
+                            }
                         }
                     }
                 }
@@ -221,21 +235,37 @@ namespace needon.Editor.Pass
                         {
                             if (item == null || item.mesh == null) continue;
 
-                            var bsCurve = new AnimationCurve(new Keyframe(0f, isActive ? item.value : 0f));
+                            var value = isActive ? item.value : 0f;
                             var bsPath = GetRelativePath(item.mesh.transform, avatarRoot);
                             needon.Editor.Util.ClosetLogger.Log(child, "Log.Blendshape.Path", bsPath, isActive);
+                            var property = $"blendShape.{item.shapeKey}";
                             var bsBinding = EditorCurveBinding.FloatCurve(
                                 bsPath,
                                 typeof(SkinnedMeshRenderer),
-                                $"blendShape.{item.shapeKey}"
+                                property
                             );
-                            AnimationUtility.SetEditorCurve(clip, bsBinding, bsCurve);
+
+                            var key = bsBinding.path + "|" + bsBinding.propertyName;
+                            if (!blendshapeCurves.ContainsKey(key))
+                            {
+                                blendshapeCurves[key] = (bsBinding, new AnimationCurve(new Keyframe(0f, value)));
+                            }
+                            else if (isActive)
+                            {
+                                blendshapeCurves[key] = (bsBinding, new AnimationCurve(new Keyframe(0f, value)));
+                            }
                         }
                     }
                 }
             }
 
             // 애니메이션 저장
+            // 누적된 블렌드셰이프 곡선을 한 번만 기록 (중복 덮어쓰기 방지)
+            foreach (var kv in blendshapeCurves.Values)
+            {
+                AnimationUtility.SetEditorCurve(clip, kv.binding, kv.curve);
+            }
+
             if (AssetDatabase.LoadAssetAtPath<AnimationClip>(clipPath) == null)
             {
                 AssetDatabase.CreateAsset(clip, clipPath);
