@@ -90,7 +90,11 @@ namespace needon.Editor.Pass
 
             // ON/OFF 팝업
             var activeProp = property.FindPropertyRelative("active");
-            string[] options = { "ON", "OFF" };
+            var ctx        = property.serializedObject?.targetObject as UnityEngine.Object;
+            string[] options = {
+                needon.Editor.Util.ClosetLocalization.Get(ctx, "Drawer.Toggle.On"),
+                needon.Editor.Util.ClosetLocalization.Get(ctx, "Drawer.Toggle.Off")
+            };
             int current = activeProp.boolValue ? 0 : 1;
             int choice  = EditorGUI.Popup(popupRect, current, options);
             activeProp.boolValue = (choice == 0);

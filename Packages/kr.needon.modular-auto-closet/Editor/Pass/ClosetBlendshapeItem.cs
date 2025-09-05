@@ -65,45 +65,61 @@ namespace needon.Editor.Pass
             var meshProp = property.FindPropertyRelative("mesh");
             var shapeKeyProp = property.FindPropertyRelative("shapeKey");
             var valueProp = property.FindPropertyRelative("value");
+            var ctx = property.serializedObject?.targetObject as UnityEngine.Object;
 
             if (meshProp == null || shapeKeyProp == null || valueProp == null)
             {
-                EditorGUI.HelpBox(new Rect(position.x + padding, y, position.width - 2 * padding, lineHeight * 2), "ClosetBlendshapeItem 필드 오류", MessageType.Error);
+                var err = needon.Editor.Util.ClosetLocalization.Get(ctx, "Error.BlendshapeItem.FieldsMissing");
+                EditorGUI.HelpBox(new Rect(position.x + padding, y, position.width - 2 * padding, lineHeight * 2), err, MessageType.Error);
                 EditorGUI.EndProperty();
                 return;
             }
 
-            EditorGUI.PropertyField(new Rect(position.x + padding, y, position.width - 2 * padding, lineHeight), meshProp, new GUIContent("Skinned Mesh"));
+            var labelSkinned = needon.Editor.Util.ClosetLocalization.Get(ctx, "Drawer.Common.SkinnedMesh");
+            EditorGUI.PropertyField(new Rect(position.x + padding, y, position.width - 2 * padding, lineHeight), meshProp, new GUIContent(labelSkinned));
             y += lineHeight + fieldSpacing;
 
             // ShapeKey 드롭다운
             SkinnedMeshRenderer smr = meshProp.objectReferenceValue as SkinnedMeshRenderer;
             if (smr != null && smr.sharedMesh != null)
             {
-                var names = new System.Collections.Generic.List<string> { "Please select" };
+                var noneText = needon.Editor.Util.ClosetLocalization.Get(ctx, "Drawer.Common.None");
+                var names = new System.Collections.Generic.List<string> { noneText };
                 names.AddRange(System.Linq.Enumerable.Range(0, smr.sharedMesh.blendShapeCount)
                                          .Select(idx => smr.sharedMesh.GetBlendShapeName(idx)));
 
-                int selIndex = Mathf.Max(0, names.IndexOf(shapeKeyProp.stringValue));
-                selIndex = EditorGUI.Popup(new Rect(position.x + padding, y, position.width - 2 * padding, lineHeight), "Name", selIndex, names.ToArray());
-                shapeKeyProp.stringValue = names[selIndex];
+                // current selection by actual key (empty means none)
+                int selIndex = 0;
+                if (!string.IsNullOrEmpty(shapeKeyProp.stringValue))
+                {
+                    var idx = names.IndexOf(shapeKeyProp.stringValue);
+                    selIndex = Mathf.Max(0, idx);
+                }
+
+                var labelName = needon.Editor.Util.ClosetLocalization.Get(ctx, "Drawer.Common.Name");
+                selIndex = EditorGUI.Popup(new Rect(position.x + padding, y, position.width - 2 * padding, lineHeight), labelName, selIndex, names.ToArray());
+                shapeKeyProp.stringValue = (selIndex == 0) ? string.Empty : names[selIndex];
                 y += lineHeight + fieldSpacing;
 
-                bool selectable = shapeKeyProp.stringValue != "Please select";
+                bool selectable = !string.IsNullOrEmpty(shapeKeyProp.stringValue);
+                var labelValue = needon.Editor.Util.ClosetLocalization.Get(ctx, "Drawer.Common.Value");
                 EditorGUI.BeginDisabledGroup(!selectable);
                 valueProp.floatValue = selectable
-                    ? EditorGUI.Slider(new Rect(position.x + padding, y, position.width - 2 * padding, lineHeight), "Value", valueProp.floatValue, 0f, 100f)
-                    : EditorGUI.Slider(new Rect(position.x + padding, y, position.width - 2 * padding, lineHeight), "Value", 0f, 0f, 100f);
+                    ? EditorGUI.Slider(new Rect(position.x + padding, y, position.width - 2 * padding, lineHeight), labelValue, valueProp.floatValue, 0f, 100f)
+                    : EditorGUI.Slider(new Rect(position.x + padding, y, position.width - 2 * padding, lineHeight), labelValue, 0f, 0f, 100f);
                 EditorGUI.EndDisabledGroup();
                 y += lineHeight + fieldSpacing;
             }
             else
             {
-                EditorGUI.LabelField(new Rect(position.x + padding, y, position.width - 2 * padding, lineHeight), "Name", "Please select a Skinned Mesh");
+                var labelName = needon.Editor.Util.ClosetLocalization.Get(ctx, "Drawer.Common.Name");
+                var labelSelectSMR = needon.Editor.Util.ClosetLocalization.Get(ctx, "Drawer.Blendshape.SelectSkinnedMesh");
+                EditorGUI.LabelField(new Rect(position.x + padding, y, position.width - 2 * padding, lineHeight), labelName, labelSelectSMR);
                 y += lineHeight + fieldSpacing;
-                shapeKeyProp.stringValue = "Please select";
+                shapeKeyProp.stringValue = string.Empty;
                 EditorGUI.BeginDisabledGroup(true);
-                EditorGUI.Slider(new Rect(position.x + padding, y, position.width - 2 * padding, lineHeight), "Value", 0f, 0f, 100f);
+                var labelValue = needon.Editor.Util.ClosetLocalization.Get(ctx, "Drawer.Common.Value");
+                EditorGUI.Slider(new Rect(position.x + padding, y, position.width - 2 * padding, lineHeight), labelValue, 0f, 0f, 100f);
                 EditorGUI.EndDisabledGroup();
                 y += lineHeight + fieldSpacing;
             }

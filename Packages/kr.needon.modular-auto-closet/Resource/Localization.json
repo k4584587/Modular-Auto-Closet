@@ -20,7 +20,21 @@
     "Log.Closet.NoChildren": "The closet does not have any child objects.",
     "Error.NoClosetInParent": "There is no Closet object in the parent of the selected object.",
     "Error.NoParameters": "The Closet object does not have ModularAvatarParameters or it has no parameters.",
-    "Error.NoValidParameter": "Could not find a valid parameter in the Closet object."
+    "Error.NoValidParameter": "Could not find a valid parameter in the Closet object.",
+
+    "Drawer.Common.SkinnedMesh": "Skinned Mesh",
+    "Drawer.Common.Name": "Name",
+    "Drawer.Common.Value": "Value",
+    "Drawer.Common.None": "(none)",
+    "Drawer.Blendshape.SelectSkinnedMesh": "Please select a Skinned Mesh",
+    "Error.BlendshapeItem.FieldsMissing": "ClosetBlendshapeItem fields missing",
+    "Error.BlendshapeToggleItem.FieldsMissing": "BlendshapeToggleItem fields missing",
+    "Drawer.Toggle.On": "ON",
+    "Drawer.Toggle.Off": "OFF",
+    "Dialog.AddClothing.Title": "Add to Closet",
+    "Dialog.AddClothing.Message": "Would you like to add the new clothing item '{0}' to the closet?",
+    "Dialog.Yes": "Yes",
+    "Dialog.No": "No"
   },
   "ko": {
     "AutoCloset.Language": "언어",
@@ -43,7 +57,21 @@
     "Log.Closet.NoChildren": "해당 옷장에는 자식 오브젝트가 없습니다.",
     "Error.NoClosetInParent": "선택한 오브젝트의 부모에 Closet 오브젝트가 없습니다.",
     "Error.NoParameters": "Closet 오브젝트에 ModularAvatarParameters가 없거나 파라미터가 없습니다.",
-    "Error.NoValidParameter": "Closet 오브젝트에서 올바른 파라미터를 찾을 수 없습니다."
+    "Error.NoValidParameter": "Closet 오브젝트에서 올바른 파라미터를 찾을 수 없습니다.",
+
+    "Drawer.Common.SkinnedMesh": "스키니드 메쉬",
+    "Drawer.Common.Name": "이름",
+    "Drawer.Common.Value": "값",
+    "Drawer.Common.None": "(없음)",
+    "Drawer.Blendshape.SelectSkinnedMesh": "스키니드 메쉬를 선택하세요",
+    "Error.BlendshapeItem.FieldsMissing": "ClosetBlendshapeItem 필드 오류",
+    "Error.BlendshapeToggleItem.FieldsMissing": "BlendshapeToggleItem 필드 오류",
+    "Drawer.Toggle.On": "켜짐",
+    "Drawer.Toggle.Off": "꺼짐",
+    "Dialog.AddClothing.Title": "옷장 추가",
+    "Dialog.AddClothing.Message": "새로운 옷 '{0}'을(를) 옷장에 추가하시겠습니까?",
+    "Dialog.Yes": "예",
+    "Dialog.No": "아니오"
   },
   "ja": {
     "AutoCloset.Language": "言語",
@@ -66,6 +94,20 @@
     "Log.Closet.NoChildren": "このクローゼットには子オブジェクトがありません。",
     "Error.NoClosetInParent": "選択したオブジェクトの親にClosetオブジェクトがありません。",
     "Error.NoParameters": "ClosetオブジェクトにModularAvatarParametersがないか、パラメータがありません。",
-    "Error.NoValidParameter": "Closetオブジェクトで有効なパラメータが見つかりませんでした。"
+    "Error.NoValidParameter": "Closetオブジェクトで有効なパラメータが見つかりませんでした。",
+
+    "Drawer.Common.SkinnedMesh": "スキンドメッシュ",
+    "Drawer.Common.Name": "名前",
+    "Drawer.Common.Value": "値",
+    "Drawer.Common.None": "(なし)",
+    "Drawer.Blendshape.SelectSkinnedMesh": "スキンドメッシュを選択してください",
+    "Error.BlendshapeItem.FieldsMissing": "ClosetBlendshapeItem フィールドエラー",
+    "Error.BlendshapeToggleItem.FieldsMissing": "BlendshapeToggleItem のフィールドが不足しています",
+    "Drawer.Toggle.On": "ON",
+    "Drawer.Toggle.Off": "OFF",
+    "Dialog.AddClothing.Title": "クローゼットに追加",
+    "Dialog.AddClothing.Message": "新しい衣装 '{0}' をクローゼットに追加しますか?",
+    "Dialog.Yes": "はい",
+    "Dialog.No": "いいえ"
   }
 }

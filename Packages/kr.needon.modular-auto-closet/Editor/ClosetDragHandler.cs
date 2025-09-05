@@ -53,15 +53,14 @@ namespace needon.Editor
                         continue;
                     }
 
-                    // 새로 감지된 자식에 대해 대화상자 표시 (한국어 + 영어)
+                    // 새로 감지된 자식에 대해 대화상자 표시 (로컬라이즈)
                     if (known.Add(child))
                     {
-                        if (EditorUtility.DisplayDialog(
-                                "옷장 추가 / Add Closet",
-                                $"새로운 옷 '{child.name}'을 옷장에 추가하시겠습니까?\n" +
-                                $"Would you like to add the new clothing item '{child.name}' to the closet?",
-                                "Yes",
-                                "No"))
+                        var title = needon.Editor.Util.ClosetLocalization.Get(child, "Dialog.AddClothing.Title");
+                        var msg   = needon.Editor.Util.ClosetLocalization.Get(child, "Dialog.AddClothing.Message", child.name);
+                        var yes   = needon.Editor.Util.ClosetLocalization.Get(child, "Dialog.Yes");
+                        var no    = needon.Editor.Util.ClosetLocalization.Get(child, "Dialog.No");
+                        if (EditorUtility.DisplayDialog(title, msg, yes, no))
                         {
                             AutoClosetCreate.AddClosetToClothing(child.gameObject);
                         }

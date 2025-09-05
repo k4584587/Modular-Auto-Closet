@@ -75,10 +75,12 @@ namespace needon.Editor.Pass
             var shapeKeyProp = property.FindPropertyRelative("shapeKey");
             var valueProp    = property.FindPropertyRelative("value");
             var activeProp   = property.FindPropertyRelative("active");
+            var ctx          = property.serializedObject?.targetObject as UnityEngine.Object;
 
             if (meshProp == null || shapeKeyProp == null || valueProp == null || activeProp == null)
             {
-                EditorGUI.LabelField(position, "BlendshapeToggleItem fields missing");
+                var msg = needon.Editor.Util.ClosetLocalization.Get(ctx, "Error.BlendshapeToggleItem.FieldsMissing");
+                EditorGUI.LabelField(position, msg);
                 return;
             }
 
@@ -118,7 +120,8 @@ namespace needon.Editor.Pass
             meshProp.objectReferenceValue = newObj;
 
             SkinnedMeshRenderer smr = newObj;
-            string[] options = { "(none)" };
+            string noneText = needon.Editor.Util.ClosetLocalization.Get(ctx, "Drawer.Common.None");
+            string[] options = { noneText };
             int current = 0;
             if (smr != null && smr.sharedMesh != null)
             {
@@ -140,7 +143,10 @@ namespace needon.Editor.Pass
 
             valueProp.floatValue = EditorGUI.Slider(valueRect, GUIContent.none, valueProp.floatValue, 0f, 100f);
 
-            string[] popupOptions = { "ON", "OFF" };
+            string[] popupOptions = {
+                needon.Editor.Util.ClosetLocalization.Get(ctx, "Drawer.Toggle.On"),
+                needon.Editor.Util.ClosetLocalization.Get(ctx, "Drawer.Toggle.Off")
+            };
             int currentPopup = activeProp.boolValue ? 0 : 1;
             int popupChoice = EditorGUI.Popup(popupRect, currentPopup, popupOptions);
             activeProp.boolValue = (popupChoice == 0);
