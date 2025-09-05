@@ -124,11 +124,25 @@ namespace needon.Editor
                 childMenuItem.Control.parameter = new VRCExpressionsMenu.Control.Parameter { name = uniqueName };
                 childMenuItem.Control.value = 0;
 
-                // Toggle & Blendshape 보장
-                if (child.gameObject.GetComponent<ClosetBlendshape>() == null)
-                    child.gameObject.AddComponent<ClosetBlendshape>();
-                if (child.gameObject.GetComponent<ClosetToggle>() == null)
-                    child.gameObject.AddComponent<ClosetToggle>();
+                // Unified Closet configuration component (replaces separate ClosetBlendshape/ClosetToggle)
+                var closetConfig = child.gameObject.GetComponent<ClosetConfig>();
+                if (closetConfig == null)
+                {
+                    closetConfig = child.gameObject.AddComponent<ClosetConfig>();
+
+                    // Migrate from existing components if present
+                    var legacyBlend = child.gameObject.GetComponent<ClosetBlendshape>();
+                    if (legacyBlend != null && legacyBlend.shapes != null)
+                    {
+                        closetConfig.shapes = legacyBlend.shapes;
+                    }
+
+                    var legacyToggle = child.gameObject.GetComponent<ClosetToggle>();
+                    if (legacyToggle != null && legacyToggle.toggles != null)
+                    {
+                        closetConfig.toggles = legacyToggle.toggles;
+                    }
+                }
 
                 // 썸네일 생성 & 아이콘 적용 (실패 시 fallbackIcon 사용)
                 var tex = ClosetThumbnailUtil.GenerateAndAssignThumbnail(
@@ -195,8 +209,20 @@ namespace needon.Editor
     // 컴포넌트 보장
     var menuItem = selected.GetComponent<ModularAvatarMenuItem>();
     if (menuItem == null) menuItem = selected.AddComponent<ModularAvatarMenuItem>();
-    if (selected.GetComponent<ClosetBlendshape>() == null) selected.AddComponent<ClosetBlendshape>();
-    if (selected.GetComponent<ClosetToggle>() == null)     selected.AddComponent<ClosetToggle>();
+    // Attach unified config instead of separate components
+    if (selected.GetComponent<ClosetConfig>() == null)
+    {
+        var cfg = selected.AddComponent<ClosetConfig>();
+
+        // If legacy components exist, migrate their data
+        var legacyBlend = selected.GetComponent<ClosetBlendshape>();
+        if (legacyBlend != null && legacyBlend.shapes != null)
+            cfg.shapes = legacyBlend.shapes;
+
+        var legacyToggle = selected.GetComponent<ClosetToggle>();
+        if (legacyToggle != null && legacyToggle.toggles != null)
+            cfg.toggles = legacyToggle.toggles;
+    }
 
     // 기본 아이콘 (실패 시 대체)
     var fallbackIcon = AssetDatabase.LoadAssetAtPath<Texture2D>(

@@ -13,6 +13,18 @@ public class AutoCloset : AvatarTagComponent
     /// </summary>
     public string toggleRootName = "Toggle";
 
+    public enum ClosetLanguage
+    {
+        English,
+        Korean,
+        Japanese
+    }
+
+    /// <summary>
+    /// Editor UI language for AutoCloset related inspectors.
+    /// </summary>
+    public ClosetLanguage language = ClosetLanguage.Korean;
+
     public IEnumerable Clothes;
 }
 #endif

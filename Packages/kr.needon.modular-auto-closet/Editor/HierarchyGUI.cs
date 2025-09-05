@@ -38,7 +38,9 @@ namespace needon.Editor
 
         private static bool HasClosetComponents(GameObject gameObject)
         {
-            return gameObject.GetComponent<AutoCloset>() || gameObject.GetComponent<ClosetToggle>();
+            return gameObject.GetComponent<AutoCloset>()
+                   || gameObject.GetComponent<ClosetToggle>()
+                   || gameObject.GetComponent<ClosetConfig>();
         }
 
         private static void DrawIcons(Component[] components, Rect iconRect)
@@ -51,7 +53,7 @@ namespace needon.Editor
                 }
 
                 var componentType = component.GetType();
-                if (componentType != typeof(AutoCloset) && componentType != typeof(ClosetToggle)) continue;
+                if (componentType != typeof(AutoCloset) && componentType != typeof(ClosetToggle) && componentType != typeof(ClosetConfig)) continue;
                 var icon = AssetPreview.GetMiniThumbnail(component);
                 if (icon == null) continue;
                 GUI.DrawTexture(iconRect, icon);

@@ -132,13 +132,14 @@ namespace needon.Editor.Pass
 
                 AnimationUtility.SetEditorCurve(clip, binding, curve);
 
-                // 추가 ClosetToggle 컴포넌트 처리 - 현재 활성화된 옷의 설정만 적용
-                if (isActive)
+                // ClosetConfig (unified) takes precedence when present
+                var closetConfig = child.GetComponent<ClosetConfig>();
+                if (closetConfig != null)
                 {
-                    var closetToggle = child.GetComponent<ClosetToggle>();
-                    if (closetToggle != null && closetToggle.toggles != null)
+                    // Toggles (only when this clothing is active)
+                    if (isActive && closetConfig.toggles != null)
                     {
-                        foreach (var toggle in closetToggle.toggles)
+                        foreach (var toggle in closetConfig.toggles)
                         {
                             if (toggle == null || toggle.target == null) continue;
 
@@ -158,30 +159,78 @@ namespace needon.Editor.Pass
                             AnimationUtility.SetEditorCurve(clip, toggleBinding, toggleCurve);
                         }
                     }
-                }
 
-                // 추가 ClosetBlendshape 컴포넌트 처리
-                var closetBlendshape = child.GetComponent<ClosetBlendshape>();
-                if (closetBlendshape != null && closetBlendshape.shapes != null)
-                {
-                    foreach (var item in closetBlendshape.shapes)
+                    // Blendshapes
+                    if (closetConfig.shapes != null)
                     {
-                        if (item == null || item.mesh == null) continue;
+                        foreach (var item in closetConfig.shapes)
+                        {
+                            if (item == null || item.mesh == null) continue;
 
-                        var bsCurve = new AnimationCurve(
-                            new Keyframe(0f, isActive ? item.value : 0f)
-                        );
+                            var bsCurve = new AnimationCurve(
+                                new Keyframe(0f, isActive ? item.value : 0f)
+                            );
 
-                        var bsPath = GetRelativePath(item.mesh.transform, avatarRoot);
-                        Debug.Log($"Blendshape path: {bsPath} (Active: {isActive})");
+                            var bsPath = GetRelativePath(item.mesh.transform, avatarRoot);
+                            Debug.Log($"Blendshape path: {bsPath} (Active: {isActive})");
 
-                        var bsBinding = EditorCurveBinding.FloatCurve(
-                            bsPath,
-                            typeof(SkinnedMeshRenderer),
-                            $"blendShape.{item.shapeKey}"
-                        );
+                            var bsBinding = EditorCurveBinding.FloatCurve(
+                                bsPath,
+                                typeof(SkinnedMeshRenderer),
+                                $"blendShape.{item.shapeKey}"
+                            );
 
-                        AnimationUtility.SetEditorCurve(clip, bsBinding, bsCurve);
+                            AnimationUtility.SetEditorCurve(clip, bsBinding, bsCurve);
+                        }
+                    }
+                }
+                else
+                {
+                    // Fallback to legacy components for backward compatibility
+                    if (isActive)
+                    {
+                        var closetToggle = child.GetComponent<ClosetToggle>();
+                        if (closetToggle != null && closetToggle.toggles != null)
+                        {
+                            foreach (var toggle in closetToggle.toggles)
+                            {
+                                if (toggle == null || toggle.target == null) continue;
+
+                                var toggleCurve = new AnimationCurve(
+                                    new Keyframe(0f, toggle.active ? 1f : 0f)
+                                );
+
+                                var togglePath = GetRelativePath(toggle.target.transform, avatarRoot);
+                                Debug.Log($"Toggle path: {togglePath} (Active: {toggle.active})");
+
+                                var toggleBinding = EditorCurveBinding.FloatCurve(
+                                    togglePath,
+                                    typeof(GameObject),
+                                    "m_IsActive"
+                                );
+
+                                AnimationUtility.SetEditorCurve(clip, toggleBinding, toggleCurve);
+                            }
+                        }
+                    }
+
+                    var closetBlendshape = child.GetComponent<ClosetBlendshape>();
+                    if (closetBlendshape != null && closetBlendshape.shapes != null)
+                    {
+                        foreach (var item in closetBlendshape.shapes)
+                        {
+                            if (item == null || item.mesh == null) continue;
+
+                            var bsCurve = new AnimationCurve(new Keyframe(0f, isActive ? item.value : 0f));
+                            var bsPath = GetRelativePath(item.mesh.transform, avatarRoot);
+                            Debug.Log($"Blendshape path: {bsPath} (Active: {isActive})");
+                            var bsBinding = EditorCurveBinding.FloatCurve(
+                                bsPath,
+                                typeof(SkinnedMeshRenderer),
+                                $"blendShape.{item.shapeKey}"
+                            );
+                            AnimationUtility.SetEditorCurve(clip, bsBinding, bsCurve);
+                        }
                     }
                 }
             }
