@@ -40,7 +40,7 @@ namespace needon.Editor.Util
                 {"BlendshapeToggle", closetIcon},
                 {"ClosetConfig", closetIcon},
                 {"ClosetBlendshape", closetIcon},
-                {"AutoClosetObjectToggle", closetIcon},
+                {"AutoClosetObjectToggle", toggleOnIcon != null ? toggleOnIcon : closetIcon},
                 {"StandaloneToggle", toggleOnIcon != null ? toggleOnIcon : closetIcon}
             };
 
