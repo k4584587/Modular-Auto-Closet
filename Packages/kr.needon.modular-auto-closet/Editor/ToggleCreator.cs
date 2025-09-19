@@ -4,6 +4,7 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using nadena.dev.modular_avatar.core;
+using VRC.SDK3.Avatars.Components;
 using VRC.SDK3.Avatars.ScriptableObjects;
 
 namespace needon.Editor
@@ -11,7 +12,7 @@ namespace needon.Editor
     public static class ToggleCreator
     {
         private const string ToggleMenuPath = "GameObject/Hirami/Add Create Toggle";
-        private const int Priority = 1;
+        private const int Priority = 1; // place under the separator group in the Hirami menu
 
         [MenuItem(ToggleMenuPath, true, Priority)]
         private static bool ValidateCreateToggle()
@@ -24,7 +25,9 @@ namespace needon.Editor
             if (!anyCloset) return false;
 
             // 선택 자체가 AutoCloset 이면 비활성화 (루트에 직접 생성 방지)
-            return selectedObjects.All(go => go.GetComponent<AutoCloset>() == null);
+            return selectedObjects.All(go =>
+                go.GetComponent<AutoCloset>() == null &&
+                go.GetComponent<VRCAvatarDescriptor>() == null);
         }
 
         [MenuItem(ToggleMenuPath, false, Priority)]
