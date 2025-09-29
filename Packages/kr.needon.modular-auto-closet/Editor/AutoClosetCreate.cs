@@ -1,10 +1,12 @@
-﻿using System.Collections.Generic;
+﻿#if UNITY_EDITOR
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
-using nadena.dev.modular_avatar.core;
 using UnityEditor;
 using UnityEngine;
 using VRC.SDK3.Avatars.ScriptableObjects;
 using VRC.SDKBase;
+using nadena.dev.modular_avatar.core;
 
 namespace needon.Editor
 {
@@ -24,20 +26,29 @@ namespace needon.Editor
                 if (!ValidateCore(selectedObject))
                     continue;
 
-                // 각 선택된 오브젝트마다 고유한 파라미터 이름 생성 (예: AutoCloset_8자리해시)
+                // 선택된 오브젝트마다 고유 파라미터 생성
                 var uniqueName = "AutoCloset_" + System.Guid.NewGuid().ToString("N").Substring(0, 8);
 
-                // Closet 아이콘 로드
-                var componentIcon = AssetDatabase.LoadAssetAtPath<Texture2D>("Packages/kr.needon.modular-auto-closet/Resource/ClosetIcon.png");
+                // 기본 아이콘 (실패 시 대체)
+                var componentIcon = AssetDatabase.LoadAssetAtPath<Texture2D>(
+                    "Packages/kr.needon.modular-auto-closet/Resource/ClosetIcon.png");
 
-                // 부모 오브젝트에 필요한 컴포넌트 및 메뉴 설정
+                // 부모 세팅
                 ApplyComponents(selectedObject, componentIcon, uniqueName);
-                // 자식 오브젝트들에도 아이콘 포함하여 설정
-                ApplyToChildren(selectedObject, uniqueName, componentIcon);
+
+                // 자식 세팅 + 썸네일 자동 생성/적용
+                ApplyToChildren(
+                    parentObject: selectedObject,
+                    uniqueName: uniqueName,
+                    fallbackIcon: componentIcon,
+                    size: 512,
+                    overwrite: false,   // 기존 파일 있으면 재사용
+                    chromaTol: 0.02f,   // 마젠타 배경 판정 오차
+                    tempLayer: 31       // 임시 레이어 (충돌시 다른 번호 사용)
+                );
             }
         }
 
-        // 상위 체인에 AutoCloset이 있거나, 자기 자신 또는 자식에 특정 컴포넌트 있으면 false
         private static bool ValidateCore(GameObject obj) =>
             obj != null &&
             !IsUnderCloset(obj) &&
@@ -46,7 +57,6 @@ namespace needon.Editor
             obj.GetComponent<ModularAvatarMenuItem>() == null &&
             obj.GetComponent<ModularAvatarMeshSettings>() == null;
 
-        // 부모 체인에 AutoCloset이 있는지 확인
         private static bool IsUnderCloset(GameObject obj)
         {
             var current = obj.transform.parent;
@@ -61,17 +71,17 @@ namespace needon.Editor
 
         private static void ApplyComponents(GameObject targetObject, Texture2D icon = null, string uniqueName = null)
         {
-            // 필요한 컴포넌트 추가 (중복 방지)
             if (targetObject.GetComponent<AutoCloset>() == null)
                 targetObject.AddComponent<AutoCloset>();
 
             if (targetObject.GetComponent<ModularAvatarMenuInstaller>() == null)
                 targetObject.AddComponent<ModularAvatarMenuInstaller>();
 
-            var maParameters = targetObject.GetComponent<ModularAvatarParameters>() ?? targetObject.AddComponent<ModularAvatarParameters>();
-            var maMenuItem = targetObject.GetComponent<ModularAvatarMenuItem>() ?? targetObject.AddComponent<ModularAvatarMenuItem>();
+            var maParameters = targetObject.GetComponent<ModularAvatarParameters>()
+                               ?? targetObject.AddComponent<ModularAvatarParameters>();
+            var maMenuItem = targetObject.GetComponent<ModularAvatarMenuItem>()
+                              ?? targetObject.AddComponent<ModularAvatarMenuItem>();
 
-            // Int 파라미터 생성 (고유 파라미터 이름 사용)
             if (maParameters.parameters.All(p => p.nameOrPrefix != uniqueName))
             {
                 maParameters.parameters.Add(new ParameterConfig
@@ -83,52 +93,67 @@ namespace needon.Editor
                 });
             }
 
-            // 메뉴 아이콘 및 타입 설정
             maMenuItem.Control ??= new VRCExpressionsMenu.Control();
             maMenuItem.Control.type = VRCExpressionsMenu.Control.ControlType.SubMenu;
+            maMenuItem.Control.value = 0;
             maMenuItem.MenuSource = SubmenuSource.Children;
             maMenuItem.Control.icon = icon;
         }
 
-        private static void ApplyToChildren(GameObject parentObject, string uniqueName, Texture2D icon)
+        // ▼ 썸네일 자동 생성/적용 통합
+        private static void ApplyToChildren(
+            GameObject parentObject, string uniqueName, Texture2D fallbackIcon,
+            int size, bool overwrite, float chromaTol, int tempLayer)
         {
-            // 모든 직계 자식 오브젝트들의 리스트를 가져옴
             var children = new List<Transform>();
             foreach (Transform child in parentObject.transform)
-            {
                 children.Add(child);
-            }
 
-            // 씬에서의 순서대로 정렬 (위에서 아래로)
             children = children.OrderBy(t => t.GetSiblingIndex()).ToList();
 
-            // 순차적으로 value 값 할당
             for (var i = 0; i < children.Count; i++)
             {
                 var child = children[i];
-                if (child.GetComponent<ModularAvatarMenuItem>() != null) continue;
-                var childMenuItem = child.gameObject.AddComponent<ModularAvatarMenuItem>();
 
-                // MenuItem 설정 (고유 파라미터 이름 사용)
+                // 메뉴 아이템 없으면 생성
+                var childMenuItem = child.GetComponent<ModularAvatarMenuItem>();
+                if (childMenuItem == null) childMenuItem = child.gameObject.AddComponent<ModularAvatarMenuItem>();
+
                 childMenuItem.Control ??= new VRCExpressionsMenu.Control();
                 childMenuItem.Control.type = VRCExpressionsMenu.Control.ControlType.Toggle;
-                childMenuItem.Control.parameter = new VRCExpressionsMenu.Control.Parameter
-                {
-                    name = uniqueName
-                };
-                childMenuItem.Control.value = i;
-                // 자식 아이콘 설정
-                childMenuItem.Control.icon = icon;
+                childMenuItem.Control.parameter = new VRCExpressionsMenu.Control.Parameter { name = uniqueName };
+                childMenuItem.Control.value = 0;
 
-                // ModularAvatarShapeChanger 컴포넌트 추가 (중복 방지)
-                if (child.gameObject.GetComponent<ModularAvatarShapeChanger>() == null)
-                    child.gameObject.AddComponent<ModularAvatarShapeChanger>();
+                // Unified Closet configuration component (replaces separate ClosetBlendshape/ClosetToggle)
+                var closetConfig = child.gameObject.GetComponent<ClosetConfig>();
+                if (closetConfig == null)
+                {
+                    closetConfig = child.gameObject.AddComponent<ClosetConfig>();
+
+                    // Migrate from existing components if present
+                    var legacyBlend = child.gameObject.GetComponent<ClosetBlendshape>();
+                    if (legacyBlend != null && legacyBlend.shapes != null)
+                    {
+                        closetConfig.shapes = legacyBlend.shapes;
+                    }
+
+                    var legacyToggle = child.gameObject.GetComponent<ClosetToggle>();
+                    if (legacyToggle != null && legacyToggle.toggles != null)
+                    {
+                        closetConfig.toggles = legacyToggle.toggles;
+                    }
+                }
+
+                // 썸네일 생성 & 아이콘 적용 (실패 시 fallbackIcon 사용)
+                var tex = ClosetThumbnailUtil.GenerateAndAssignThumbnail(
+                    child.gameObject, uniqueName, size, overwrite, chromaTol, tempLayer);
+
+                childMenuItem.Control.icon = tex != null ? tex : fallbackIcon;
             }
         }
 
-        // ----------------------------------------------------------------
-        // 옷(클로딩) 오브젝트에 대해 Add Closet 메뉴 추가 (상위에 옷장이 있어야 함)
-        [MenuItem("GameObject/Hirami/Add Closet", true, ContextMenuPriority)]
+        // (수정 유지) Add Closet 메뉴는 비활성화
+        // [MenuItem("GameObject/Hirami/Add Closet", true, ContextMenuPriority)]
         private static bool ValidateAddClosetToClothing()
         {
             var selected = Selection.activeGameObject;
@@ -136,73 +161,102 @@ namespace needon.Editor
                 return false;
             if (selected.GetComponent<VRC_AvatarDescriptor>() != null)
                 return false;
-            // 상위에 옷장(Closet) 오브젝트가 존재하는지 확인
             return FindClosetParent(selected) != null;
         }
 
-        [MenuItem("GameObject/Hirami/Add Closet", false, ContextMenuPriority)]
-        private static void AddClosetToClothing()
+        // [MenuItem("GameObject/Hirami/Add Closet", false, ContextMenuPriority)]
+        private static void MenuAddClosetToClothing()
         {
-            var selected = Selection.activeGameObject;
-            if (selected == null)
-                return;
-
-            var closetParent = FindClosetParent(selected);
-            if (closetParent == null)
-            {
-                Debug.LogError("There is no Closet object in the parent of the selected object.");
-                return;
-            }
-
-            // 옷장(Closet) 오브젝트의 ModularAvatarParameters에서 고유 파라미터 찾기
-            var maParameters = closetParent.GetComponent<ModularAvatarParameters>();
-            if (maParameters == null || maParameters.parameters == null || maParameters.parameters.Count == 0)
-            {
-                Debug.LogError("The Closet object does not have ModularAvatarParameters or it has no parameters.");
-                return;
-            }
-            string uniqueName = null;
-            var index = 0;
-            for (; index < maParameters.parameters.Count; index++)
-            {
-                var p = maParameters.parameters[index];
-                if (!p.nameOrPrefix.StartsWith("AutoCloset_")) continue;
-                uniqueName = p.nameOrPrefix;
-                break;
-            }
-
-            if (uniqueName == null)
-            {
-                Debug.LogError("Could not find a valid parameter in the Closet object.");
-                return;
-            }
-
-            // 이미 ModularAvatarMenuItem과 ModularAvatarShapeChanger가 추가되었으면 추가하지 않고 업데이트만 수행
-            var menuItem = selected.GetComponent<ModularAvatarMenuItem>();
-            var hasComponents = menuItem != null && selected.GetComponent<ModularAvatarShapeChanger>() != null;
-
-            // Closet 아이콘 로드
-            var closetIcon = AssetDatabase.LoadAssetAtPath<Texture2D>("Packages/kr.needon.modular-auto-closet/Resource/ClosetIcon.png");
-
-            if (!hasComponents)
-            {
-                if (menuItem == null)
-                    menuItem = selected.AddComponent<ModularAvatarMenuItem>();
-
-                if (selected.GetComponent<ModularAvatarShapeChanger>() == null)
-                    selected.AddComponent<ModularAvatarShapeChanger>();
-
-                menuItem.Control ??= new VRCExpressionsMenu.Control();
-                menuItem.Control.type = VRCExpressionsMenu.Control.ControlType.Toggle;
-                menuItem.Control.parameter = new VRCExpressionsMenu.Control.Parameter { name = uniqueName };
-                // 새로 추가된 옷 아이콘 설정
-                menuItem.Control.icon = closetIcon;
-            }
-            // 상위 Closet의 모든 자식(옷) 오브젝트에 대해 순서를 재계산하여 Value값 자동 할당
-            RecalculateClosetChildren(closetParent, uniqueName);
+            AddClosetToClothing(Selection.activeGameObject);
         }
 
-        // 선택된 오브젝트의 상위에 존재하는 Closet(옷장) 오브젝트를 찾음
+        internal static void AddClosetToClothing(GameObject selected)
+{
+    if (selected == null)
+        return;
+
+    var closetParent = FindClosetParent(selected);
+    if (closetParent == null)
+    {
+        needon.Editor.Util.ClosetLogger.LogError(selected, "Error.NoClosetInParent");
+        return;
+    }
+
+    var maParameters = closetParent.GetComponent<ModularAvatarParameters>();
+    if (maParameters == null || maParameters.parameters == null || maParameters.parameters.Count == 0)
+    {
+        needon.Editor.Util.ClosetLogger.LogError(selected, "Error.NoParameters");
+        return;
+    }
+
+    // AutoCloset_ 파라미터 찾기
+    string uniqueName = null;
+    foreach (var p in maParameters.parameters)
+    {
+        if (!string.IsNullOrEmpty(p.nameOrPrefix) && p.nameOrPrefix.StartsWith("AutoCloset_"))
+        {
+            uniqueName = p.nameOrPrefix;
+            break;
+        }
+    }
+
+    if (uniqueName == null)
+    {
+        needon.Editor.Util.ClosetLogger.LogError(selected, "Error.NoValidParameter");
+        return;
+    }
+
+    // 컴포넌트 보장
+    var menuItem = selected.GetComponent<ModularAvatarMenuItem>();
+    if (menuItem == null) menuItem = selected.AddComponent<ModularAvatarMenuItem>();
+    // Attach unified config instead of separate components
+    if (selected.GetComponent<ClosetConfig>() == null)
+    {
+        var cfg = selected.AddComponent<ClosetConfig>();
+
+        // If legacy components exist, migrate their data
+        var legacyBlend = selected.GetComponent<ClosetBlendshape>();
+        if (legacyBlend != null && legacyBlend.shapes != null)
+            cfg.shapes = legacyBlend.shapes;
+
+        var legacyToggle = selected.GetComponent<ClosetToggle>();
+        if (legacyToggle != null && legacyToggle.toggles != null)
+            cfg.toggles = legacyToggle.toggles;
+    }
+
+    // 기본 아이콘 (실패 시 대체)
+    var fallbackIcon = AssetDatabase.LoadAssetAtPath<Texture2D>(
+        "Packages/kr.needon.modular-auto-closet/Resource/ClosetIcon.png");
+
+    menuItem.Control ??= new VRC.SDK3.Avatars.ScriptableObjects.VRCExpressionsMenu.Control();
+    menuItem.Control.type = VRC.SDK3.Avatars.ScriptableObjects.VRCExpressionsMenu.Control.ControlType.Toggle;
+    menuItem.Control.parameter = new VRC.SDK3.Avatars.ScriptableObjects.VRCExpressionsMenu.Control.Parameter
+    {
+        name = uniqueName
+    };
+    menuItem.Control.value = 0;
+
+    // >>> 여기서 썸네일 자동 생성 & 적용 <<<
+    // (Auto Apply와 동일 옵션: size=512, overwrite=false, chromaTol=0.02f, tempLayer=31)
+    var thumb = ClosetThumbnailUtil.GenerateAndAssignThumbnail(
+        selected, uniqueName, size: 512, overwrite: false, chromaTol: 0.02f, tempLayer: 31);
+    menuItem.Control.icon = thumb != null ? thumb : fallbackIcon;
+
+    // 순서 재계산 및 기본값 0으로 통일
+    RecalculateClosetChildren(closetParent, uniqueName);
+    foreach (Transform child in closetParent.transform)
+    {
+        var mi = child.GetComponent<ModularAvatarMenuItem>();
+        if (mi?.Control != null) mi.Control.value = 0;
+    }
+
+    // 씬 갱신
+    EditorUtility.SetDirty(selected);
+    EditorUtility.SetDirty(closetParent);
+    AssetDatabase.SaveAssets();
+}
+
+
         private static GameObject FindClosetParent(GameObject obj)
         {
             var current = obj.transform;
@@ -215,19 +269,15 @@ namespace needon.Editor
             return null;
         }
 
-        // Closet(옷장) 오브젝트의 자식(옷) 오브젝트들에 대해 순서를 재계산하여 ModularAvatarMenuItem의 Value값을 자동 할당
         private static void RecalculateClosetChildren(GameObject closetObject, string uniqueName)
         {
             var children = new List<Transform>();
             foreach (Transform child in closetObject.transform)
             {
                 var menuItem = child.GetComponent<ModularAvatarMenuItem>();
-                if (menuItem != null &&
-                    menuItem.Control is { parameter: not null } &&
+                if (menuItem != null && menuItem.Control is { parameter: not null } &&
                     menuItem.Control.parameter.name == uniqueName)
-                {
                     children.Add(child);
-                }
             }
 
             children = children.OrderBy(t => t.GetSiblingIndex()).ToList();
@@ -236,10 +286,203 @@ namespace needon.Editor
             {
                 var mi = children[i].GetComponent<ModularAvatarMenuItem>();
                 if (mi != null && mi.Control != null)
-                {
-                    mi.Control.value = i;
-                }
+                    mi.Control.value = i + 1; // 1부터
             }
         }
     }
+
+    // ===== 썸네일 유틸 =====
+    internal static class ClosetThumbnailUtil
+    {
+        private static readonly Color Chroma = new Color(1f, 0f, 1f, 1f); // Magenta 배경
+
+        public static Texture2D GenerateAndAssignThumbnail(
+            GameObject target, string uniqueName, int size, bool overwrite, float chromaTol, int tempLayer)
+        {
+            if (target == null) return null;
+
+            // === 저장 경로를 Assets/Hirami/AutoCloset 쪽으로 변경 ===
+            var baseDir = "Assets/Hirami";
+            if (!AssetDatabase.IsValidFolder(baseDir)) AssetDatabase.CreateFolder("Assets", "Hirami");
+
+            var closetDir = baseDir + "/AutoCloset";
+            if (!AssetDatabase.IsValidFolder(closetDir)) AssetDatabase.CreateFolder(baseDir, "AutoCloset");
+
+            var uniqueDir = closetDir + "/" + uniqueName;
+            if (!AssetDatabase.IsValidFolder(uniqueDir)) AssetDatabase.CreateFolder(closetDir, uniqueName);
+
+            var path = $"{uniqueDir}/{Sanitize(target.name)}.png";
+
+            if (!overwrite)
+            {
+                var existing = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                if (existing != null)
+                {
+                    return existing;
+                }
+            }
+
+            var tex = CaptureToTexture(target, size, chromaTol, tempLayer);
+            if (tex == null) return null;
+
+            var png = tex.EncodeToPNG();
+            File.WriteAllBytes(path, png);
+            Object.DestroyImmediate(tex);
+
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+            var importer = AssetImporter.GetAtPath(path) as TextureImporter;
+            if (importer != null)
+            {
+                importer.textureType = TextureImporterType.Default;
+                importer.alphaIsTransparency = true;
+                importer.mipmapEnabled = false;
+                importer.sRGBTexture = true;
+                importer.SaveAndReimport();
+            }
+
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+        }
+
+
+        private static Texture2D CaptureToTexture(GameObject target, int size, float chromaTol, int tempLayer)
+        {
+            // 비활성 포함 전체 Renderer 수집 (필터 제거)
+            var renderers = target.GetComponentsInChildren<Renderer>(true);
+            if (renderers.Length == 0) return null;
+
+            // === 활성/렌더/옵션 상태 백업 & 임시 활성화 ===
+            var goStates = new List<(GameObject go, bool activeSelf)>();
+            foreach (var t in target.GetComponentsInChildren<Transform>(true))
+            {
+                goStates.Add((t.gameObject, t.gameObject.activeSelf));
+                if (!t.gameObject.activeSelf) t.gameObject.SetActive(true);
+            }
+
+            var renStates = new List<(Renderer r, bool enabled)>();
+            var smrStates = new List<(SkinnedMeshRenderer smr, bool updateWhenOffscreen)>();
+            foreach (var r in renderers)
+            {
+                renStates.Add((r, r.enabled));
+                if (!r.enabled) r.enabled = true;
+
+                if (r is SkinnedMeshRenderer smr)
+                {
+                    smrStates.Add((smr, smr.updateWhenOffscreen));
+                    smr.updateWhenOffscreen = true; // 오프스크린 업데이트 보장
+                }
+            }
+
+            // 바운드 계산
+            var bounds = new Bounds(renderers[0].bounds.center, Vector3.zero);
+            foreach (var r in renderers) bounds.Encapsulate(r.bounds);
+
+            // 임시 레이어로 격리
+            var originals = new List<(Transform t, int layer)>();
+            SetLayerRecursively(target.transform, tempLayer, originals);
+
+            // 카메라/라이트/RT
+            var camGO = new GameObject("__ClosetThumbCam__") { hideFlags = HideFlags.HideAndDontSave };
+            var cam = camGO.AddComponent<Camera>();
+            cam.orthographic = true;
+            cam.clearFlags = CameraClearFlags.SolidColor;
+            cam.backgroundColor = Chroma;
+            cam.cullingMask = (1 << tempLayer);
+            cam.allowMSAA = true;
+            // near clip은 양수의 작은 값으로 설정 (음수 사용 지양)
+            cam.nearClipPlane = 0.01f;
+            cam.farClipPlane = 100f;
+
+            var ext = bounds.extents;
+            var center = bounds.center;
+            camGO.transform.position = center + new Vector3(0, 0, -10f);
+            camGO.transform.LookAt(center, Vector3.up);
+            cam.orthographicSize = Mathf.Max(ext.y, ext.x) * 1.2f;
+
+            var lightGO = new GameObject("__ClosetThumbLight__") { hideFlags = HideFlags.HideAndDontSave };
+            var light = lightGO.AddComponent<Light>();
+            light.type = LightType.Directional;
+            light.intensity = 1.1f;
+            lightGO.transform.rotation = Quaternion.Euler(30f, -30f, 0f);
+
+            var rt = new RenderTexture(size, size, 24, RenderTextureFormat.ARGB32);
+            RenderTexture.active = rt;
+            cam.targetTexture = rt;
+
+            try
+            {
+                cam.Render();
+
+                var tex = new Texture2D(size, size, TextureFormat.ARGB32, false, false);
+                tex.ReadPixels(new Rect(0, 0, size, size), 0, 0);
+                tex.Apply();
+
+                // 마젠타 → 투명
+                var pixels = tex.GetPixels32();
+                for (int i = 0; i < pixels.Length; i++)
+                {
+                    var c = pixels[i];
+                    if (IsChroma(c, chromaTol)) pixels[i] = new Color32(0, 0, 0, 0);
+                }
+                tex.SetPixels32(pixels);
+                tex.Apply();
+
+                return tex;
+            }
+            finally
+            {
+                // 정리
+                RenderTexture.active = null;
+                if (cam) cam.targetTexture = null;
+                if (rt) rt.Release();
+
+                Object.DestroyImmediate(rt);
+                Object.DestroyImmediate(lightGO);
+                Object.DestroyImmediate(camGO);
+
+                // 레이어 복구
+                RestoreLayers(originals);
+
+                // 상태 복구 (역순)
+                for (int i = renStates.Count - 1; i >= 0; i--)
+                    if (renStates[i].r) renStates[i].r.enabled = renStates[i].enabled;
+
+                for (int i = smrStates.Count - 1; i >= 0; i--)
+                    if (smrStates[i].smr) smrStates[i].smr.updateWhenOffscreen = smrStates[i].updateWhenOffscreen;
+
+                for (int i = goStates.Count - 1; i >= 0; i--)
+                    if (goStates[i].go) goStates[i].go.SetActive(goStates[i].activeSelf);
+            }
+        }
+
+        private static bool IsChroma(Color32 c, float tol)
+        {
+            // (1,0,1) 근처면 배경으로 간주
+            float dr = Mathf.Abs(c.r / 255f - 1f);
+            float dg = Mathf.Abs(c.g / 255f - 0f);
+            float db = Mathf.Abs(c.b / 255f - 1f);
+            return (dr + dg + db) / 3f <= tol;
+        }
+
+        private static void SetLayerRecursively(Transform t, int layer, List<(Transform, int)> originals)
+        {
+            originals.Add((t, t.gameObject.layer));
+            t.gameObject.layer = layer;
+            for (int i = 0; i < t.childCount; i++)
+                SetLayerRecursively(t.GetChild(i), layer, originals);
+        }
+
+        private static void RestoreLayers(List<(Transform t, int layer)> originals)
+        {
+            foreach (var (t, layer) in originals)
+                if (t) t.gameObject.layer = layer;
+        }
+
+        private static string Sanitize(string name)
+        {
+            foreach (var c in Path.GetInvalidFileNameChars())
+                name = name.Replace(c, '_');
+            return name;
+        }
+    }
 }
+#endif

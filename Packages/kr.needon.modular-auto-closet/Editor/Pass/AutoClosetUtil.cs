@@ -3,6 +3,7 @@ using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
 using VRC.SDK3.Avatars.Components;
+using System.Collections.Generic;
 
 namespace needon.Editor.Pass
 {
@@ -34,26 +35,26 @@ namespace needon.Editor.Pass
         private static string GetRelativePath(Transform target, Transform root)
         {
             if (target == root) return "";
-            
+
             var path = target.name;
             var current = target.parent;
-            
+
             while (current != null && current != root)
             {
                 path = current.name + "/" + path;
                 current = current.parent;
             }
-            
+
             return path;
         }
 
         public static RuntimeAnimatorController GetAvatarFxAnimator(VRCAvatarDescriptor avatarDescriptor)
         {
             var controllerLayer = Array.FindIndex(
-                avatarDescriptor.baseAnimationLayers, 
+                avatarDescriptor.baseAnimationLayers,
                 item => item.type == VRCAvatarDescriptor.AnimLayerType.FX && item.animatorController
             );
-            
+
             if (controllerLayer == -1)
             {
                 ErrorDialog("Cannot find FX animator controller!");
@@ -84,8 +85,8 @@ namespace needon.Editor.Pass
 
         public static AnimationClip CreateClosetAnimationClip(GameObject closet, string parentName, string activeClothesName)
         {
-            var clipPath = $"Packages/nadena.dev.ndmf/__Generated/{parentName}/_assets/{activeClothesName}.anim"; 
-            
+            var clipPath = $"Packages/nadena.dev.ndmf/__Generated/{parentName}/_assets/{activeClothesName}.anim";
+
             // 디렉토리가 없으면 생성
             var directory = System.IO.Path.GetDirectoryName(clipPath);
             if (!System.IO.Directory.Exists(directory))
@@ -109,12 +110,17 @@ namespace needon.Editor.Pass
 
             // 아바타 루트 찾기
             var avatarRoot = closet.transform.root;
-            
+
+            // 동일한 SkinnedMeshRenderer/BlendShape 바인딩이 여러 의상에서 설정될 때
+            // 비활성(0) 값이 활성 의상의 값(>0)을 덮어쓰는 문제를 방지하기 위한 집계 맵
+            // key: path|propertyName, value: (binding, curve)
+            var blendshapeCurves = new Dictionary<string, (EditorCurveBinding binding, AnimationCurve curve)>();
+
             // 모든 옷장 자식(옷)의 활성화 상태를 애니메이션으로 기록
             foreach (Transform child in closet.transform)
             {
                 var isActive = (child.name == activeClothesName);
-                
+
                 // 단일 키프레임만 사용하여 0초 시점에만 값을 기록
                 var curve = new AnimationCurve(
                     new Keyframe(0f, isActive ? 1f : 0f)
@@ -122,18 +128,144 @@ namespace needon.Editor.Pass
 
                 // 아바타 루트로부터의 상대 경로 계산
                 var relativePath = GetRelativePath(child.transform, avatarRoot);
-                Debug.Log($"Setting animation path: {relativePath} (Active: {isActive})");
-                
+                needon.Editor.Util.ClosetLogger.Log(child, "Log.Anim.Path", relativePath, isActive);
+
                 var binding = EditorCurveBinding.FloatCurve(
                     relativePath,
                     typeof(GameObject),
                     "m_IsActive"
                 );
-                
+
                 AnimationUtility.SetEditorCurve(clip, binding, curve);
+
+                // ClosetConfig (unified) takes precedence when present
+                var closetConfig = child.GetComponent<ClosetConfig>();
+                if (closetConfig != null)
+                {
+                    // Toggles (only when this clothing is active)
+                    if (isActive && closetConfig.toggles != null)
+                    {
+                        foreach (var toggle in closetConfig.toggles)
+                        {
+                            if (toggle == null || toggle.target == null) continue;
+
+                            var toggleCurve = new AnimationCurve(
+                                new Keyframe(0f, toggle.active ? 1f : 0f)
+                            );
+
+                            var togglePath = GetRelativePath(toggle.target.transform, avatarRoot);
+                            needon.Editor.Util.ClosetLogger.Log(child, "Log.Toggle.Path", togglePath, toggle.active);
+
+                            var toggleBinding = EditorCurveBinding.FloatCurve(
+                                togglePath,
+                                typeof(GameObject),
+                                "m_IsActive"
+                            );
+
+                            AnimationUtility.SetEditorCurve(clip, toggleBinding, toggleCurve);
+                        }
+                    }
+
+                    // Blendshapes
+                    if (closetConfig.shapes != null)
+                    {
+                        foreach (var item in closetConfig.shapes)
+                        {
+                            if (item == null || item.mesh == null) continue;
+
+                            var value = isActive ? item.value : 0f;
+
+                            var bsPath = GetRelativePath(item.mesh.transform, avatarRoot);
+                            needon.Editor.Util.ClosetLogger.Log(child, "Log.Blendshape.Path", bsPath, isActive);
+
+                            var property = $"blendShape.{item.shapeKey}";
+                            var bsBinding = EditorCurveBinding.FloatCurve(
+                                bsPath,
+                                typeof(SkinnedMeshRenderer),
+                                property
+                            );
+
+                            var key = bsBinding.path + "|" + bsBinding.propertyName;
+                            if (!blendshapeCurves.ContainsKey(key))
+                            {
+                                blendshapeCurves[key] = (bsBinding, new AnimationCurve(new Keyframe(0f, value)));
+                            }
+                            else if (isActive)
+                            {
+                                // 활성 의상의 값이 최우선이며, 비활성(0) 값으로는 덮어쓰지 않음
+                                blendshapeCurves[key] = (bsBinding, new AnimationCurve(new Keyframe(0f, value)));
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    // Fallback to legacy components for backward compatibility
+                    if (isActive)
+                    {
+                        var closetToggle = child.GetComponent<ClosetToggle>();
+                        if (closetToggle != null && closetToggle.toggles != null)
+                        {
+                            foreach (var toggle in closetToggle.toggles)
+                            {
+                                if (toggle == null || toggle.target == null) continue;
+
+                                var toggleCurve = new AnimationCurve(
+                                    new Keyframe(0f, toggle.active ? 1f : 0f)
+                                );
+
+                                var togglePath = GetRelativePath(toggle.target.transform, avatarRoot);
+                                needon.Editor.Util.ClosetLogger.Log(child, "Log.Toggle.Path", togglePath, toggle.active);
+
+                                var toggleBinding = EditorCurveBinding.FloatCurve(
+                                    togglePath,
+                                    typeof(GameObject),
+                                    "m_IsActive"
+                                );
+
+                                AnimationUtility.SetEditorCurve(clip, toggleBinding, toggleCurve);
+                            }
+                        }
+                    }
+
+                    var closetBlendshape = child.GetComponent<ClosetBlendshape>();
+                    if (closetBlendshape != null && closetBlendshape.shapes != null)
+                    {
+                        foreach (var item in closetBlendshape.shapes)
+                        {
+                            if (item == null || item.mesh == null) continue;
+
+                            var value = isActive ? item.value : 0f;
+                            var bsPath = GetRelativePath(item.mesh.transform, avatarRoot);
+                            needon.Editor.Util.ClosetLogger.Log(child, "Log.Blendshape.Path", bsPath, isActive);
+                            var property = $"blendShape.{item.shapeKey}";
+                            var bsBinding = EditorCurveBinding.FloatCurve(
+                                bsPath,
+                                typeof(SkinnedMeshRenderer),
+                                property
+                            );
+
+                            var key = bsBinding.path + "|" + bsBinding.propertyName;
+                            if (!blendshapeCurves.ContainsKey(key))
+                            {
+                                blendshapeCurves[key] = (bsBinding, new AnimationCurve(new Keyframe(0f, value)));
+                            }
+                            else if (isActive)
+                            {
+                                blendshapeCurves[key] = (bsBinding, new AnimationCurve(new Keyframe(0f, value)));
+                            }
+                        }
+                    }
+                }
             }
 
             // 애니메이션 저장
+            // 누적된 블렌드셰이프 곡선을 한 번만 기록 (중복 덮어쓰기 방지)
+            foreach (var kv in blendshapeCurves.Values)
+            {
+                AnimationUtility.SetEditorCurve(clip, kv.binding, kv.curve);
+            }
+
             if (AssetDatabase.LoadAssetAtPath<AnimationClip>(clipPath) == null)
             {
                 AssetDatabase.CreateAsset(clip, clipPath);
@@ -144,7 +276,7 @@ namespace needon.Editor.Pass
             }
 
             AssetDatabase.SaveAssets();
-            Debug.Log($"Animation clip saved at: {clipPath}");
+            needon.Editor.Util.ClosetLogger.Log(closet, "Log.Anim.Saved", clipPath);
             return clip;
         }
 
@@ -163,6 +295,68 @@ namespace needon.Editor.Pass
                 controller.layers = layers;
                 break;
             }
+        }
+
+        /// <summary>
+        /// 단일 타겟에 대해 On 또는 Off 애니메이션 클립을 생성합니다.
+        /// </summary>
+        /// <param name="target">애니메이션을 기록할 GameObject</param>
+        /// <param name="parentName">클립이 저장될 폴더명 (패키지 내 __Generated 경로 아래)</param>
+        /// <param name="clipName">클립 파일명 (확장자 없이)</param>
+        /// <param name="isOn">true면 On 클립, false면 Off 클립</param>
+        public static AnimationClip CreateToggleAnimationClip(GameObject target, string parentName, string clipName, bool isOn)
+        {
+            // On/Off 구분 접미사
+            var suffix = isOn ? "On" : "Off";
+            // Packages/nadena.dev.ndmf/__Generated/{parentName}/_assets/{clipName}_{On|Off}.anim
+            var clipPath = $"Packages/nadena.dev.ndmf/__Generated/{parentName}/_assets/{clipName}_{suffix}.anim";
+
+            // 디렉토리 생성
+            var directory = System.IO.Path.GetDirectoryName(clipPath);
+            if (!System.IO.Directory.Exists(directory))
+                System.IO.Directory.CreateDirectory(directory);
+
+            // 기존 클립 불러오기 또는 새로 만들기
+            var clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(clipPath) ?? new AnimationClip();
+            // 기존 커브 제거
+            foreach (var binding in AnimationUtility.GetCurveBindings(clip))
+                AnimationUtility.SetEditorCurve(clip, binding, null);
+
+            // 타겟의 루트(씬 최상위) 기준 상대 경로 계산
+            var root = target.transform.root;
+            var relativePath = GetRelativePath(target.transform, root);
+            needon.Editor.Util.ClosetLogger.Log(target, "Log.Toggle.SetPath", relativePath, isOn ? 1f : 0f);
+
+            // 단일 키프레임 커브(0초에만 값 기록)
+            var curve = new AnimationCurve(new Keyframe(0f, isOn ? 1f : 0f));
+            var bindingInfo = EditorCurveBinding.FloatCurve(
+                relativePath,
+                typeof(GameObject),
+                "m_IsActive"
+            );
+            AnimationUtility.SetEditorCurve(clip, bindingInfo, curve);
+
+            // 에셋으로 저장
+            if (AssetDatabase.LoadAssetAtPath<AnimationClip>(clipPath) == null)
+                AssetDatabase.CreateAsset(clip, clipPath);
+            else
+                EditorUtility.SetDirty(clip);
+
+            AssetDatabase.SaveAssets();
+            needon.Editor.Util.ClosetLogger.Log(target, "Log.Toggle.ClipSaved", clipPath);
+            return clip;
+        }
+
+        /// <summary>
+        /// 지정한 타겟에 대해 On/Off 두 가지 애니메이션 클립을 생성합니다.
+        /// </summary>
+        /// <param name="target">애니메이션을 기록할 GameObject</param>
+        /// <param name="parentName">저장 폴더명</param>
+        /// <param name="clipName">클립 기본 이름</param>
+        public static void CreateToggleAnimations(GameObject target, string parentName, string clipName)
+        {
+            CreateToggleAnimationClip(target, parentName, clipName, true);
+            CreateToggleAnimationClip(target, parentName, clipName, false);
         }
     }
 }
