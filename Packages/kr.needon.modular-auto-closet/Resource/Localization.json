@@ -34,7 +34,11 @@
     "Dialog.AddClothing.Title": "Add to Closet",
     "Dialog.AddClothing.Message": "Would you like to add the new clothing item '{0}' to the closet?",
     "Dialog.Yes": "Yes",
-    "Dialog.No": "No"
+    "Dialog.No": "No",
+    "Dialog.LegacyCloset.Title": "Legacy Closet Detected",
+    "Dialog.LegacyCloset.Message": "This closet uses an old AutoCloset setup. Existing components will be cleared and Auto Apply Closet will run again. Continue?",
+    "Dialog.LegacyCloset.Confirm": "Upgrade",
+    "Dialog.Cancel": "Cancel"
   },
   "ko": {
     "AutoCloset.Language": "언어",
@@ -71,7 +75,11 @@
     "Dialog.AddClothing.Title": "옷장 추가",
     "Dialog.AddClothing.Message": "새로운 옷 '{0}'을(를) 옷장에 추가하시겠습니까?",
     "Dialog.Yes": "예",
-    "Dialog.No": "아니오"
+    "Dialog.No": "아니오",
+    "Dialog.LegacyCloset.Title": "구버전 옷장 감지",
+    "Dialog.LegacyCloset.Message": "이 옷장은 구버전 AutoCloset 설정을 사용하고 있습니다. 기존 컴포넌트를 제거하고 Auto Apply Closet을 다시 실행합니다. 계속할까요?",
+    "Dialog.LegacyCloset.Confirm": "업데이트",
+    "Dialog.Cancel": "취소"
   },
   "ja": {
     "AutoCloset.Language": "言語",
@@ -108,6 +116,10 @@
     "Dialog.AddClothing.Title": "クローゼットに追加",
     "Dialog.AddClothing.Message": "新しい衣装 '{0}' をクローゼットに追加しますか?",
     "Dialog.Yes": "はい",
-    "Dialog.No": "いいえ"
+    "Dialog.No": "いいえ",
+    "Dialog.LegacyCloset.Title": "旧バージョンのクローゼットを検出",
+    "Dialog.LegacyCloset.Message": "このクローゼットは旧バージョンの AutoCloset 設定を使用しています。既存のコンポーネントを削除し、Auto Apply Closet を再実行します。続行しますか？",
+    "Dialog.LegacyCloset.Confirm": "アップデート",
+    "Dialog.Cancel": "キャンセル"
   }
 }
