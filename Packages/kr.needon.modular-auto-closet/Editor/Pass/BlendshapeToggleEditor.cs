@@ -44,7 +44,7 @@ namespace needon.Editor.Pass
     {
         private const float LineHeight = 18f;
         private const float SpacingY = 2f;
-        private const float LabelWidth = 95f;
+        private const float LabelWidth = 110f;
         private const float LabelSpacing = 6f;
         private const float ActiveWidth = 60f;
 
