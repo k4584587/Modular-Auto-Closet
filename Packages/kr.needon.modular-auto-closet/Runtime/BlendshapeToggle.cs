@@ -19,5 +19,5 @@ public class BlendshapeToggleItem
 public class BlendshapeToggle : AvatarTagComponent
 {
     public BlendshapeToggleItem[] shapes;
-} 
+}
 #endif

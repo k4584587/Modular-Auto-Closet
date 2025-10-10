@@ -15,7 +15,10 @@ namespace needon.Editor
         static BlendshapeToggleMigration()
         {
             // 에디터가 컴파일되고 로드될 때 실행
+            // 중복 등록 방지를 위해 먼저 등록 해제
+            EditorApplication.delayCall -= OnEditorLoaded;
             EditorApplication.delayCall += OnEditorLoaded;
+            EditorSceneManager.sceneOpened -= OnSceneOpened;
             EditorSceneManager.sceneOpened += OnSceneOpened;
         }
 
