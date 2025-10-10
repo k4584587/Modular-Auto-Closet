@@ -99,8 +99,8 @@ namespace needon.Editor
                     new AutoClosetToggleTarget { target = obj, active = true }
                 };
 
-                // BlendshapeToggle는 의상(옷) 오브젝트에서만 필요하며
-                // 비파괴 토글 생성 시 기본 추가하지 않습니다.
+                // BlendshapeToggle 컴포넌트 자동 추가
+                itemGO.AddComponent<BlendshapeToggle>();
 
                 var menuItem = itemGO.AddComponent<ModularAvatarMenuItem>();
                 menuItem.Control    ??= new VRCExpressionsMenu.Control();
@@ -111,7 +111,11 @@ namespace needon.Editor
             else
             {
                 itemGO = existingGO.gameObject;
-                // 비파괴 토글: BlendshapeToggle은 자동 추가하지 않음
+                // 기존 토글에 BlendshapeToggle 컴포넌트가 없으면 추가
+                if (itemGO.GetComponent<BlendshapeToggle>() == null)
+                {
+                    itemGO.AddComponent<BlendshapeToggle>();
+                }
             }
 
             var parameters = itemGO.GetComponent<ModularAvatarParameters>()
@@ -150,7 +154,8 @@ namespace needon.Editor
                     .Select(o => new AutoClosetToggleTarget { target = o, active = true })
                     .ToArray();
 
-                // 비파괴 토글: BlendshapeToggle은 기본 추가하지 않음
+                // BlendshapeToggle 컴포넌트 자동 추가
+                groupGO.AddComponent<BlendshapeToggle>();
 
                 // 메뉴 아이템 & 파라미터 이름(UUID 포함) 설정
                 menuItem = groupGO.AddComponent<ModularAvatarMenuItem>();
@@ -168,7 +173,11 @@ namespace needon.Editor
                 menuItem = groupGO.GetComponent<ModularAvatarMenuItem>();
                 paramName = menuItem.Control.parameter?.name ?? groupName;
 
-                // 비파괴 토글: BlendshapeToggle은 자동 추가하지 않음
+                // 기존 그룹에 BlendshapeToggle 컴포넌트가 없으면 추가
+                if (groupGO.GetComponent<BlendshapeToggle>() == null)
+                {
+                    groupGO.AddComponent<BlendshapeToggle>();
+                }
 
                 // targets 업데이트
                 var toggleComp = groupGO.GetComponent<AutoClosetObjectToggle>();
