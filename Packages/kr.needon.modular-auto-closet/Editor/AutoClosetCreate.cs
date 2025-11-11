@@ -119,12 +119,19 @@ namespace needon.Editor
                 var childMenuItem = child.GetComponent<ModularAvatarMenuItem>();
                 bool hasExistingMenuItem = childMenuItem != null;
                 bool isClosetMenuItem = false;
+                bool isSubMenu = false;
 
                 // 기존 Menu Item이 있는 경우
-                if (hasExistingMenuItem && childMenuItem.Control is { parameter: not null })
+                if (hasExistingMenuItem && childMenuItem.Control != null)
                 {
-                    // 이미 옷장 파라미터를 사용 중인지 확인
-                    isClosetMenuItem = childMenuItem.Control.parameter.name == uniqueName;
+                    // SubMenu 타입인지 확인
+                    isSubMenu = childMenuItem.Control.type == VRCExpressionsMenu.Control.ControlType.SubMenu;
+
+                    // Toggle 타입이고 파라미터가 있으면 옷장 파라미터인지 확인
+                    if (!isSubMenu && childMenuItem.Control.parameter is { name: not null })
+                    {
+                        isClosetMenuItem = childMenuItem.Control.parameter.name == uniqueName;
+                    }
                 }
 
                 // 옷장 메뉴 아이템이 없으면 생성하거나 설정
@@ -139,7 +146,7 @@ namespace needon.Editor
                     childMenuItem.Control.parameter = new VRCExpressionsMenu.Control.Parameter { name = uniqueName };
                     childMenuItem.Control.value = 0;
                 }
-                // 다른 파라미터를 사용하는 기존 Menu Item은 보존
+                // SubMenu나 다른 파라미터를 사용하는 기존 Menu Item은 보존
                 // (childMenuItem을 건드리지 않음)
 
                 // Unified Closet configuration component (replaces separate ClosetBlendshape/ClosetToggle)
@@ -233,11 +240,19 @@ namespace needon.Editor
     var menuItem = selected.GetComponent<ModularAvatarMenuItem>();
     bool hasExistingMenuItem = menuItem != null;
     bool isClosetMenuItem = false;
+    bool isSubMenu = false;
 
     // 기존 Menu Item이 있는 경우, 옷장용인지 확인
-    if (hasExistingMenuItem && menuItem.Control is { parameter: not null })
+    if (hasExistingMenuItem && menuItem.Control != null)
     {
-        isClosetMenuItem = menuItem.Control.parameter.name == uniqueName;
+        // SubMenu 타입인지 확인
+        isSubMenu = menuItem.Control.type == VRC.SDK3.Avatars.ScriptableObjects.VRCExpressionsMenu.Control.ControlType.SubMenu;
+
+        // Toggle 타입이고 파라미터가 있으면 옷장 파라미터인지 확인
+        if (!isSubMenu && menuItem.Control.parameter is { name: not null })
+        {
+            isClosetMenuItem = menuItem.Control.parameter.name == uniqueName;
+        }
     }
 
     // Attach unified config instead of separate components

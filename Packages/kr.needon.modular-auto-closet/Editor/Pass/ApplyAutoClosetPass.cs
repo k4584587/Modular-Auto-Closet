@@ -316,17 +316,20 @@ namespace needon.Editor.Pass
             {
                 var menuItem = child.GetComponent<ModularAvatarMenuItem>();
 
-                // 옷장 자식의 기존 Menu Item이 옷장 파라미터를 사용하지 않으면
-                // 옷 자체의 독립적인 메뉴로 간주하고 비활성화하지 않음
-                if (menuItem != null && menuItem.Control is { parameter: not null })
+                if (menuItem != null && menuItem.Control != null)
                 {
-                    // 옷장의 파라미터와 동일한 경우에만 옷장 메뉴로 등록
-                    if (menuItem.Control.parameter.name == uniqueName)
+                    // SubMenu 타입은 parameter가 없으므로, Toggle 타입인 경우만 파라미터 체크
+                    if (menuItem.Control.type == VRC.SDK3.Avatars.ScriptableObjects.VRCExpressionsMenu.Control.ControlType.Toggle)
                     {
-                        children.Add(child);
+                        // Toggle 타입이고 옷장 파라미터를 사용하는 경우만 옷장 메뉴로 등록
+                        if (menuItem.Control.parameter is { name: not null } &&
+                            menuItem.Control.parameter.name == uniqueName)
+                        {
+                            children.Add(child);
+                        }
+                        // 다른 파라미터를 사용하는 Toggle은 옷의 독립적인 메뉴로 유지
                     }
-                    // 다른 파라미터를 사용하는 경우, 옷의 독립적인 서브메뉴로 유지
-                    // (아무 작업도 하지 않음 - 기존 설정 보존)
+                    // SubMenu나 다른 타입은 건드리지 않음 (독립적인 기믹 메뉴)
                 }
             }
 
