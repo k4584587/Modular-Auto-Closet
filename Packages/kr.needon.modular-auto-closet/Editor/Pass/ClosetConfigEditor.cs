@@ -17,6 +17,7 @@ namespace needon.Editor.Pass
             // Ensure arrays are non-null for clean drawing
             if (_component.toggles == null) _component.toggles = new ClosetToggleItem[0];
             if (_component.shapes  == null) _component.shapes  = new ClosetBlendshapeItem[0];
+            if (_component.drivers == null) _component.drivers = new ClosetParameterDriverItem[0];
             EditorUtility.SetDirty(_component);
 
             // Set icon
@@ -50,6 +51,14 @@ namespace needon.Editor.Pass
             var helpShapes = needon.Editor.Util.ClosetLocalization.Get(_component, "ClosetConfig.Help.Shapes");
             EditorGUILayout.HelpBox(helpShapes, MessageType.Info);
             EditorGUILayout.PropertyField(serializedObject.FindProperty("shapes"), includeChildren: true);
+            EditorGUILayout.Space(6);
+
+            // Parameter Drivers section
+            var labelDrivers = needon.Editor.Util.ClosetLocalization.Get(_component, "ClosetConfig.Section.Drivers");
+            EditorGUILayout.LabelField(labelDrivers, EditorStyles.boldLabel);
+            var helpDrivers = needon.Editor.Util.ClosetLocalization.Get(_component, "ClosetConfig.Help.Drivers");
+            EditorGUILayout.HelpBox(helpDrivers, MessageType.Info);
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("drivers"), includeChildren: true);
 
             serializedObject.ApplyModifiedProperties();
         }
