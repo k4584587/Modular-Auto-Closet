@@ -44,7 +44,10 @@ namespace needon.Editor.Pass
                     }
 
                     RecalculateClosetChildren(closetGameObject, uniqueName);
-                    
+
+                    // 옷장의 모든 옷에 대해 애니메이션 경로 리매핑 수행
+                    AnimationPathRemapper.RemapClosetAnimations(closetGameObject, avatar.transform);
+
                     // 각 옷장마다 별도의 애니메이터 레이어와 파라미터 생성
                     CreateLayerAndParameter(uniqueName);
                     var layerIndex = FindAutoClosetLayerIndex(uniqueName);
