@@ -100,6 +100,34 @@ namespace needon.Editor.Pass
         }
 
         /// <summary>
+        /// 경로를 리매핑합니다. 정확히 일치하거나 부분 매칭되는 경로를 찾습니다.
+        /// </summary>
+        private static string RemapPath(string originalPath, Dictionary<string, string> pathMapping, out bool wasChanged)
+        {
+            wasChanged = false;
+
+            // 정확히 일치하는 경로가 있으면 사용
+            if (pathMapping.TryGetValue(originalPath, out var newPath))
+            {
+                wasChanged = true;
+                return newPath;
+            }
+
+            // 부분 매칭 확인 (가장 긴 경로부터 매칭)
+            foreach (var kvp in pathMapping.OrderByDescending(p => p.Key.Length))
+            {
+                if (originalPath.StartsWith(kvp.Key + "/"))
+                {
+                    // Substring을 사용하여 경로의 시작 부분만 안전하게 치환
+                    wasChanged = true;
+                    return kvp.Value + originalPath.Substring(kvp.Key.Length);
+                }
+            }
+
+            return originalPath;
+        }
+
+        /// <summary>
         /// 애니메이션 클립의 모든 바인딩 경로를 리매핑합니다.
         /// </summary>
         private static AnimationClip RemapClipPaths(AnimationClip originalClip, Dictionary<string, string> pathMapping, string clipSavePath)
@@ -122,26 +150,12 @@ namespace needon.Editor.Pass
                 var curve = AnimationUtility.GetEditorCurve(originalClip, binding);
                 var newBinding = binding;
 
-                // 경로가 매핑에 존재하면 변경
-                if (pathMapping.TryGetValue(binding.path, out var newPath))
+                var remappedPath = RemapPath(binding.path, pathMapping, out bool pathChanged);
+                if (pathChanged)
                 {
-                    newBinding.path = newPath;
+                    newBinding.path = remappedPath;
                     hasChanges = true;
-                    needon.Editor.Util.ClosetLogger.Log(originalClip, "Log.Remap.PathChanged", binding.path, newPath);
-                }
-                // 부분 매칭도 확인 (하위 경로)
-                else
-                {
-                    foreach (var kvp in pathMapping)
-                    {
-                        if (binding.path.StartsWith(kvp.Key + "/"))
-                        {
-                            newBinding.path = binding.path.Replace(kvp.Key, kvp.Value);
-                            hasChanges = true;
-                            needon.Editor.Util.ClosetLogger.Log(originalClip, "Log.Remap.PathChanged", binding.path, newBinding.path);
-                            break;
-                        }
-                    }
+                    needon.Editor.Util.ClosetLogger.Log(originalClip, "Log.Remap.PathChanged", binding.path, remappedPath);
                 }
 
                 AnimationUtility.SetEditorCurve(newClip, newBinding, curve);
@@ -154,24 +168,12 @@ namespace needon.Editor.Pass
                 var curve = AnimationUtility.GetObjectReferenceCurve(originalClip, binding);
                 var newBinding = binding;
 
-                if (pathMapping.TryGetValue(binding.path, out var newPath))
+                var remappedPath = RemapPath(binding.path, pathMapping, out bool pathChanged);
+                if (pathChanged)
                 {
-                    newBinding.path = newPath;
+                    newBinding.path = remappedPath;
                     hasChanges = true;
-                    needon.Editor.Util.ClosetLogger.Log(originalClip, "Log.Remap.PathChanged", binding.path, newPath);
-                }
-                else
-                {
-                    foreach (var kvp in pathMapping)
-                    {
-                        if (binding.path.StartsWith(kvp.Key + "/"))
-                        {
-                            newBinding.path = binding.path.Replace(kvp.Key, kvp.Value);
-                            hasChanges = true;
-                            needon.Editor.Util.ClosetLogger.Log(originalClip, "Log.Remap.PathChanged", binding.path, newBinding.path);
-                            break;
-                        }
-                    }
+                    needon.Editor.Util.ClosetLogger.Log(originalClip, "Log.Remap.PathChanged", binding.path, remappedPath);
                 }
 
                 AnimationUtility.SetObjectReferenceCurve(newClip, newBinding, curve);
