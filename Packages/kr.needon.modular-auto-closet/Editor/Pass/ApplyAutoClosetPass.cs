@@ -217,34 +217,23 @@ namespace needon.Editor.Pass
                 }
             }
 
-            // 각 파라미터의 기본값을 아바타 파라미터 정의에서 가져오기
-            foreach (var info in result.Values)
-            {
-                info.DefaultValue = GetAvatarParameterDefaultValue(context, info.ParameterName);
-            }
-
-            return result;
-        }
-
-        /// <summary>
-        /// 아바타에 정의된 파라미터의 기본값을 가져옵니다.
-        /// </summary>
-        private float GetAvatarParameterDefaultValue(BuildContext context, string parameterName)
-        {
-            // 1. VRC Avatar Descriptor의 Expression Parameters에서 찾기
+            // Cache all available avatar parameters to avoid repeated lookups.
+            var avatarParameters = new Dictionary<string, float>();
             var avatar = context.AvatarDescriptor;
+
+            // 1. From VRC Expression Parameters
             if (avatar.expressionParameters != null && avatar.expressionParameters.parameters != null)
             {
                 foreach (var param in avatar.expressionParameters.parameters)
                 {
-                    if (param.name == parameterName)
+                    if (!string.IsNullOrEmpty(param.name))
                     {
-                        return param.defaultValue;
+                        avatarParameters[param.name] = param.defaultValue;
                     }
                 }
             }
 
-            // 2. Modular Avatar Parameters에서 찾기
+            // 2. From Modular Avatar Parameters (overwriting VRC params if names conflict, which is MA behavior)
             var maParams = avatar.GetComponentsInChildren<ModularAvatarParameters>(true);
             foreach (var maParam in maParams)
             {
@@ -252,15 +241,29 @@ namespace needon.Editor.Pass
 
                 foreach (var param in maParam.parameters)
                 {
-                    if (param.nameOrPrefix == parameterName && param.defaultValue != 0f)
+                    if (!string.IsNullOrEmpty(param.nameOrPrefix))
                     {
-                        return param.defaultValue;
+                        // 0f is a valid default, so no need to check for non-zero.
+                        avatarParameters[param.nameOrPrefix] = param.defaultValue;
                     }
                 }
             }
 
-            // 3. 파라미터를 찾지 못한 경우, Bool/Toggle의 일반적인 기본값인 1 반환
-            return 1f;
+            // 각 파라미터의 기본값을 아바타 파라미터 정의에서 가져오기
+            foreach (var info in result.Values)
+            {
+                if (avatarParameters.TryGetValue(info.ParameterName, out var defaultValue))
+                {
+                    info.DefaultValue = defaultValue;
+                }
+                else
+                {
+                    // Fallback to a safer default of 0f if the parameter is not found.
+                    info.DefaultValue = 0f;
+                }
+            }
+
+            return result;
         }
 
         /// <summary>
