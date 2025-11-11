@@ -315,8 +315,19 @@ namespace needon.Editor.Pass
             foreach (Transform child in closetObject.transform)
             {
                 var menuItem = child.GetComponent<ModularAvatarMenuItem>();
-                if (menuItem != null && menuItem.Control is { parameter: not null } && menuItem.Control.parameter.name == uniqueName)
-                    children.Add(child);
+
+                // 옷장 자식의 기존 Menu Item이 옷장 파라미터를 사용하지 않으면
+                // 옷 자체의 독립적인 메뉴로 간주하고 비활성화하지 않음
+                if (menuItem != null && menuItem.Control is { parameter: not null })
+                {
+                    // 옷장의 파라미터와 동일한 경우에만 옷장 메뉴로 등록
+                    if (menuItem.Control.parameter.name == uniqueName)
+                    {
+                        children.Add(child);
+                    }
+                    // 다른 파라미터를 사용하는 경우, 옷의 독립적인 서브메뉴로 유지
+                    // (아무 작업도 하지 않음 - 기존 설정 보존)
+                }
             }
 
             children = children.OrderBy(t => t.GetSiblingIndex()).ToList();

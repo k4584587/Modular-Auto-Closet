@@ -115,14 +115,32 @@ namespace needon.Editor
             {
                 var child = children[i];
 
-                // 메뉴 아이템 없으면 생성
+                // 메뉴 아이템 처리
                 var childMenuItem = child.GetComponent<ModularAvatarMenuItem>();
-                if (childMenuItem == null) childMenuItem = child.gameObject.AddComponent<ModularAvatarMenuItem>();
+                bool hasExistingMenuItem = childMenuItem != null;
+                bool isClosetMenuItem = false;
 
-                childMenuItem.Control ??= new VRCExpressionsMenu.Control();
-                childMenuItem.Control.type = VRCExpressionsMenu.Control.ControlType.Toggle;
-                childMenuItem.Control.parameter = new VRCExpressionsMenu.Control.Parameter { name = uniqueName };
-                childMenuItem.Control.value = 0;
+                // 기존 Menu Item이 있는 경우
+                if (hasExistingMenuItem && childMenuItem.Control is { parameter: not null })
+                {
+                    // 이미 옷장 파라미터를 사용 중인지 확인
+                    isClosetMenuItem = childMenuItem.Control.parameter.name == uniqueName;
+                }
+
+                // 옷장 메뉴 아이템이 없으면 생성하거나 설정
+                if (!hasExistingMenuItem || isClosetMenuItem)
+                {
+                    // Menu Item이 없거나, 이미 옷장용이면 설정
+                    if (childMenuItem == null)
+                        childMenuItem = child.gameObject.AddComponent<ModularAvatarMenuItem>();
+
+                    childMenuItem.Control ??= new VRCExpressionsMenu.Control();
+                    childMenuItem.Control.type = VRCExpressionsMenu.Control.ControlType.Toggle;
+                    childMenuItem.Control.parameter = new VRCExpressionsMenu.Control.Parameter { name = uniqueName };
+                    childMenuItem.Control.value = 0;
+                }
+                // 다른 파라미터를 사용하는 기존 Menu Item은 보존
+                // (childMenuItem을 건드리지 않음)
 
                 // Unified Closet configuration component (replaces separate ClosetBlendshape/ClosetToggle)
                 var closetConfig = child.gameObject.GetComponent<ClosetConfig>();
@@ -144,11 +162,16 @@ namespace needon.Editor
                     }
                 }
 
-                // 썸네일 생성 & 아이콘 적용 (실패 시 fallbackIcon 사용)
-                var tex = ClosetThumbnailUtil.GenerateAndAssignThumbnail(
-                    child.gameObject, uniqueName, size, overwrite, chromaTol, tempLayer);
+                // 썸네일 생성 & 아이콘 적용 (옷장 메뉴인 경우에만)
+                if (!hasExistingMenuItem || isClosetMenuItem)
+                {
+                    var tex = ClosetThumbnailUtil.GenerateAndAssignThumbnail(
+                        child.gameObject, uniqueName, size, overwrite, chromaTol, tempLayer);
 
-                childMenuItem.Control.icon = tex != null ? tex : fallbackIcon;
+                    if (childMenuItem != null && childMenuItem.Control != null)
+                        childMenuItem.Control.icon = tex != null ? tex : fallbackIcon;
+                }
+                // 기존 Menu Item의 아이콘은 보존
             }
         }
 
@@ -208,7 +231,15 @@ namespace needon.Editor
 
     // 컴포넌트 보장
     var menuItem = selected.GetComponent<ModularAvatarMenuItem>();
-    if (menuItem == null) menuItem = selected.AddComponent<ModularAvatarMenuItem>();
+    bool hasExistingMenuItem = menuItem != null;
+    bool isClosetMenuItem = false;
+
+    // 기존 Menu Item이 있는 경우, 옷장용인지 확인
+    if (hasExistingMenuItem && menuItem.Control is { parameter: not null })
+    {
+        isClosetMenuItem = menuItem.Control.parameter.name == uniqueName;
+    }
+
     // Attach unified config instead of separate components
     if (selected.GetComponent<ClosetConfig>() == null)
     {
@@ -224,23 +255,30 @@ namespace needon.Editor
             cfg.toggles = legacyToggle.toggles;
     }
 
-    // 기본 아이콘 (실패 시 대체)
-    var fallbackIcon = AssetDatabase.LoadAssetAtPath<Texture2D>(
-        "Packages/kr.needon.modular-auto-closet/Resource/ClosetIcon.png");
-
-    menuItem.Control ??= new VRC.SDK3.Avatars.ScriptableObjects.VRCExpressionsMenu.Control();
-    menuItem.Control.type = VRC.SDK3.Avatars.ScriptableObjects.VRCExpressionsMenu.Control.ControlType.Toggle;
-    menuItem.Control.parameter = new VRC.SDK3.Avatars.ScriptableObjects.VRCExpressionsMenu.Control.Parameter
+    // 옷장 메뉴로 설정 (기존 독립 메뉴가 아닌 경우에만)
+    if (!hasExistingMenuItem || isClosetMenuItem)
     {
-        name = uniqueName
-    };
-    menuItem.Control.value = 0;
+        if (menuItem == null) menuItem = selected.AddComponent<ModularAvatarMenuItem>();
 
-    // >>> 여기서 썸네일 자동 생성 & 적용 <<<
-    // (Auto Apply와 동일 옵션: size=512, overwrite=false, chromaTol=0.02f, tempLayer=31)
-    var thumb = ClosetThumbnailUtil.GenerateAndAssignThumbnail(
-        selected, uniqueName, size: 512, overwrite: false, chromaTol: 0.02f, tempLayer: 31);
-    menuItem.Control.icon = thumb != null ? thumb : fallbackIcon;
+        // 기본 아이콘 (실패 시 대체)
+        var fallbackIcon = AssetDatabase.LoadAssetAtPath<Texture2D>(
+            "Packages/kr.needon.modular-auto-closet/Resource/ClosetIcon.png");
+
+        menuItem.Control ??= new VRC.SDK3.Avatars.ScriptableObjects.VRCExpressionsMenu.Control();
+        menuItem.Control.type = VRC.SDK3.Avatars.ScriptableObjects.VRCExpressionsMenu.Control.ControlType.Toggle;
+        menuItem.Control.parameter = new VRC.SDK3.Avatars.ScriptableObjects.VRCExpressionsMenu.Control.Parameter
+        {
+            name = uniqueName
+        };
+        menuItem.Control.value = 0;
+
+        // >>> 여기서 썸네일 자동 생성 & 적용 <<<
+        // (Auto Apply와 동일 옵션: size=512, overwrite=false, chromaTol=0.02f, tempLayer=31)
+        var thumb = ClosetThumbnailUtil.GenerateAndAssignThumbnail(
+            selected, uniqueName, size: 512, overwrite: false, chromaTol: 0.02f, tempLayer: 31);
+        menuItem.Control.icon = thumb != null ? thumb : fallbackIcon;
+    }
+    // 기존 독립 메뉴 아이템은 보존 (옷의 자체 기믹 메뉴)
 
     // 순서 재계산 및 기본값 0으로 통일
     RecalculateClosetChildren(closetParent, uniqueName);
