@@ -50,7 +50,7 @@ namespace needon.Editor.Pass
                     var layerIndex = FindAutoClosetLayerIndex(uniqueName);
                     var stateMachine = _autoClosetController.layers[layerIndex].stateMachine;
 
-                    CreateClosetStates(closetGameObject, stateMachine, uniqueName);
+                    CreateClosetStates(closetGameObject, stateMachine, uniqueName, context);
                 }
             }
             catch (Exception e)
@@ -115,19 +115,22 @@ namespace needon.Editor.Pass
 
         }
 
-        private void CreateClosetStates(GameObject closet, AnimatorStateMachine stateMachine, string uniqueName)
+        private void CreateClosetStates(GameObject closet, AnimatorStateMachine stateMachine, string uniqueName, BuildContext context)
         {
             var parentName = closet.transform.parent != null ? closet.transform.parent.name : closet.name;
             var defaultClothes = closet.transform.GetChild(0);
 
+            // 옷장의 모든 파라미터 드라이버를 수집하여 스마트 리셋 정보 생성
+            var parameterResetInfo = CollectParameterResetInfo(closet, context);
+
             // 기본 옷 상태 생성
-            CreateDefaultClothesState(closet, parentName, defaultClothes, stateMachine, uniqueName);
+            CreateDefaultClothesState(closet, parentName, defaultClothes, stateMachine, uniqueName, parameterResetInfo);
 
             // 추가 옷 상태 생성
-            CreateAdditionalClothesStates(closet, parentName, defaultClothes, stateMachine, uniqueName);
+            CreateAdditionalClothesStates(closet, parentName, defaultClothes, stateMachine, uniqueName, parameterResetInfo);
         }
 
-        private void CreateDefaultClothesState(GameObject closet, string parentName, Transform defaultClothes, AnimatorStateMachine stateMachine, string uniqueName)
+        private void CreateDefaultClothesState(GameObject closet, string parentName, Transform defaultClothes, AnimatorStateMachine stateMachine, string uniqueName, Dictionary<string, ParameterResetInfo> parameterResetInfo)
         {
             var defaultClip = AutoClosetUtil.CreateClosetAnimationClip(closet, parentName, defaultClothes.name);
             var defaultState = stateMachine.AddState(defaultClothes.name, new Vector3(300, 0, 0));
@@ -136,9 +139,12 @@ namespace needon.Editor.Pass
 
             var anyToDefaultTransition = stateMachine.AddAnyStateTransition(defaultState);
             ConfigureTransition(anyToDefaultTransition, 0, uniqueName);
+
+            // 파라미터 드라이버 적용 (스마트 리셋 포함)
+            ApplyParameterDriversToClothes(defaultClothes, defaultState, parameterResetInfo);
         }
 
-        private void CreateAdditionalClothesStates(GameObject closet, string parentName, Transform defaultClothes, AnimatorStateMachine stateMachine, string uniqueName)
+        private void CreateAdditionalClothesStates(GameObject closet, string parentName, Transform defaultClothes, AnimatorStateMachine stateMachine, string uniqueName, Dictionary<string, ParameterResetInfo> parameterResetInfo)
         {
             var index = 1;
             foreach (Transform child in closet.transform)
@@ -152,6 +158,9 @@ namespace needon.Editor.Pass
                 var anyStateTransition = stateMachine.AddAnyStateTransition(newState);
                 ConfigureTransition(anyStateTransition, index, uniqueName);
 
+                // 파라미터 드라이버 적용 (스마트 리셋 포함)
+                ApplyParameterDriversToClothes(child, newState, parameterResetInfo);
+
                 index++;
             }
         }
@@ -163,7 +172,140 @@ namespace needon.Editor.Pass
             transition.duration = 0f;
             transition.AddCondition(AnimatorConditionMode.Equals, parameterValue, uniqueName);
         }
-        
+
+        /// <summary>
+        /// 파라미터 리셋 정보를 담는 클래스
+        /// </summary>
+        private class ParameterResetInfo
+        {
+            public string ParameterName;
+            public Dictionary<string, float> ClothesValues = new Dictionary<string, float>(); // 옷 이름 -> 설정 값
+            public float DefaultValue = 1f; // 기본값 (명시하지 않은 옷에서 사용)
+        }
+
+        /// <summary>
+        /// 옷장의 모든 파라미터 드라이버를 수집하여 리셋 정보를 생성합니다.
+        /// </summary>
+        private Dictionary<string, ParameterResetInfo> CollectParameterResetInfo(GameObject closet, BuildContext context)
+        {
+            var result = new Dictionary<string, ParameterResetInfo>();
+
+            foreach (Transform child in closet.transform)
+            {
+                var config = child.GetComponent<ClosetConfig>();
+                if (config == null || config.drivers == null || config.drivers.Length == 0)
+                    continue;
+
+                foreach (var driver in config.drivers)
+                {
+                    if (driver == null || string.IsNullOrEmpty(driver.name))
+                        continue;
+
+                    // Set 타입만 스마트 리셋 지원 (Add, Random, Copy는 제외)
+                    if (driver.type != ClosetParameterDriverItem.ChangeType.Set)
+                        continue;
+
+                    if (!result.ContainsKey(driver.name))
+                    {
+                        result[driver.name] = new ParameterResetInfo
+                        {
+                            ParameterName = driver.name
+                        };
+                    }
+
+                    result[driver.name].ClothesValues[child.name] = driver.value;
+                }
+            }
+
+            // Cache all available avatar parameters to avoid repeated lookups.
+            var avatarParameters = new Dictionary<string, float>();
+            var avatar = context.AvatarDescriptor;
+
+            // 1. From VRC Expression Parameters
+            if (avatar.expressionParameters != null && avatar.expressionParameters.parameters != null)
+            {
+                foreach (var param in avatar.expressionParameters.parameters)
+                {
+                    if (!string.IsNullOrEmpty(param.name))
+                    {
+                        avatarParameters[param.name] = param.defaultValue;
+                    }
+                }
+            }
+
+            // 2. From Modular Avatar Parameters (overwriting VRC params if names conflict, which is MA behavior)
+            var maParams = avatar.GetComponentsInChildren<ModularAvatarParameters>(true);
+            foreach (var maParam in maParams)
+            {
+                if (maParam.parameters == null) continue;
+
+                foreach (var param in maParam.parameters)
+                {
+                    if (!string.IsNullOrEmpty(param.nameOrPrefix))
+                    {
+                        // 0f is a valid default, so no need to check for non-zero.
+                        avatarParameters[param.nameOrPrefix] = param.defaultValue;
+                    }
+                }
+            }
+
+            // 각 파라미터의 기본값을 아바타 파라미터 정의에서 가져오기
+            foreach (var info in result.Values)
+            {
+                if (avatarParameters.TryGetValue(info.ParameterName, out var defaultValue))
+                {
+                    info.DefaultValue = defaultValue;
+                }
+                else
+                {
+                    // Fallback to a safer default of 0f if the parameter is not found.
+                    info.DefaultValue = 0f;
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// 옷 상태에 파라미터 드라이버를 적용합니다. (스마트 리셋 포함)
+        /// </summary>
+        private void ApplyParameterDriversToClothes(Transform clothes, AnimatorState state, Dictionary<string, ParameterResetInfo> parameterResetInfo)
+        {
+            if (clothes == null || state == null)
+                return;
+
+            var driversList = new List<ClosetParameterDriverItem>();
+
+            // 1. 이 옷에 명시적으로 설정된 드라이버들 추가
+            var config = clothes.GetComponent<ClosetConfig>();
+            if (config != null && config.drivers != null && config.drivers.Length > 0)
+            {
+                driversList.AddRange(config.drivers);
+            }
+
+            // 2. 명시하지 않은 파라미터들을 아바타 기본값으로 리셋
+            foreach (var info in parameterResetInfo.Values)
+            {
+                // 이 옷이 해당 파라미터를 명시적으로 설정하지 않았으면 아바타의 기본값으로 리셋
+                if (!info.ClothesValues.ContainsKey(clothes.name))
+                {
+                    var resetDriver = new ClosetParameterDriverItem
+                    {
+                        type = ClosetParameterDriverItem.ChangeType.Set,
+                        name = info.ParameterName,
+                        value = info.DefaultValue
+                    };
+                    driversList.Add(resetDriver);
+                }
+            }
+
+            // 3. 드라이버가 있으면 AnimatorState에 적용
+            if (driversList.Count > 0)
+            {
+                AutoClosetUtil.ApplyParameterDriversToState(state, driversList.ToArray());
+            }
+        }
+
         private void RecalculateClosetChildren(GameObject closetObject, string uniqueName)
         {
             var children = new List<Transform>();

@@ -4,6 +4,7 @@ using UnityEditor.Animations;
 using UnityEngine;
 using VRC.SDK3.Avatars.Components;
 using System.Collections.Generic;
+using VRC.SDKBase;
 
 namespace needon.Editor.Pass
 {
@@ -357,6 +358,63 @@ namespace needon.Editor.Pass
         {
             CreateToggleAnimationClip(target, parentName, clipName, true);
             CreateToggleAnimationClip(target, parentName, clipName, false);
+        }
+
+        /// <summary>
+        /// AnimatorState에 파라미터 드라이버를 추가합니다.
+        /// </summary>
+        /// <param name="state">파라미터 드라이버를 추가할 AnimatorState</param>
+        /// <param name="driverItems">추가할 파라미터 드라이버 아이템 목록</param>
+        public static void ApplyParameterDriversToState(AnimatorState state, ClosetParameterDriverItem[] driverItems)
+        {
+            if (state == null || driverItems == null || driverItems.Length == 0)
+                return;
+
+            // VRCAvatarParameterDriver StateMachineBehaviour 추가
+            var driver = state.AddStateMachineBehaviour<VRCAvatarParameterDriver>();
+            driver.parameters = new List<VRC_AvatarParameterDriver.Parameter>();
+
+            foreach (var item in driverItems)
+            {
+                if (item == null) continue;
+
+                var param = new VRC_AvatarParameterDriver.Parameter();
+
+                switch (item.type)
+                {
+                    case ClosetParameterDriverItem.ChangeType.Set:
+                        param.type = VRC_AvatarParameterDriver.ChangeType.Set;
+                        param.name = item.name;
+                        param.value = item.value;
+                        break;
+
+                    case ClosetParameterDriverItem.ChangeType.Add:
+                        param.type = VRC_AvatarParameterDriver.ChangeType.Add;
+                        param.name = item.name;
+                        param.value = item.value;
+                        param.chance = item.chance;
+                        break;
+
+                    case ClosetParameterDriverItem.ChangeType.Random:
+                        param.type = VRC_AvatarParameterDriver.ChangeType.Random;
+                        param.name = item.name;
+                        param.valueMin = item.valueMin;
+                        param.valueMax = item.valueMax;
+                        param.chance = item.chance;
+                        break;
+
+                    case ClosetParameterDriverItem.ChangeType.Copy:
+                        param.type = VRC_AvatarParameterDriver.ChangeType.Copy;
+                        param.source = item.source;
+                        param.name = string.IsNullOrEmpty(item.destName) ? item.source : item.destName;
+                        param.chance = item.chance;
+                        break;
+                }
+
+                driver.parameters.Add(param);
+            }
+
+            needon.Editor.Util.ClosetLogger.Log(state, "Log.ParameterDriver.Applied", driver.parameters.Count);
         }
     }
 }
