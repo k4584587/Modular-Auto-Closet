@@ -13,6 +13,21 @@ namespace needon.Editor.Pass
         private static bool _previewEnabled = false;
         private static Dictionary<SkinnedMeshRenderer, Dictionary<int, float>> _originalBlendshapeValues = new Dictionary<SkinnedMeshRenderer, Dictionary<int, float>>();
 
+        static ClosetConfigEditor()
+        {
+            EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+        }
+
+        private static void OnPlayModeStateChanged(PlayModeStateChange state)
+        {
+            // Restore blendshapes before entering play mode
+            if (state == PlayModeStateChange.ExitingEditMode)
+            {
+                RestoreOriginalBlendshapes();
+                _previewEnabled = false;
+            }
+        }
+
         public void OnEnable()
         {
             _component = (ClosetConfig)target;
@@ -43,7 +58,7 @@ namespace needon.Editor.Pass
         {
             foreach (var meshEntry in _originalBlendshapeValues)
             {
-                if (meshEntry.Key == null) continue;
+                if (meshEntry.Key == null || meshEntry.Key.sharedMesh == null) continue;
 
                 foreach (var shapeEntry in meshEntry.Value)
                 {
@@ -60,6 +75,17 @@ namespace needon.Editor.Pass
             return _previewEnabled;
         }
 
+        private static void SaveOriginalBlendshapeValue(SkinnedMeshRenderer mesh, int blendshapeIndex)
+        {
+            if (mesh == null || blendshapeIndex < 0) return;
+
+            if (!_originalBlendshapeValues.ContainsKey(mesh))
+                _originalBlendshapeValues[mesh] = new Dictionary<int, float>();
+
+            if (!_originalBlendshapeValues[mesh].ContainsKey(blendshapeIndex))
+                _originalBlendshapeValues[mesh][blendshapeIndex] = mesh.GetBlendShapeWeight(blendshapeIndex);
+        }
+
         public static void ApplyBlendshapePreview(SkinnedMeshRenderer mesh, string shapeKey, float value)
         {
             if (!_previewEnabled || mesh == null || string.IsNullOrEmpty(shapeKey)) return;
@@ -68,11 +94,7 @@ namespace needon.Editor.Pass
             if (index < 0) return;
 
             // Save original value (only once per mesh/shape)
-            if (!_originalBlendshapeValues.ContainsKey(mesh))
-                _originalBlendshapeValues[mesh] = new Dictionary<int, float>();
-
-            if (!_originalBlendshapeValues[mesh].ContainsKey(index))
-                _originalBlendshapeValues[mesh][index] = mesh.GetBlendShapeWeight(index);
+            SaveOriginalBlendshapeValue(mesh, index);
 
             // Apply preview value
             mesh.SetBlendShapeWeight(index, value);
@@ -91,11 +113,7 @@ namespace needon.Editor.Pass
                 if (index < 0) continue;
 
                 // Save original value (only once per mesh/shape)
-                if (!_originalBlendshapeValues.ContainsKey(shape.mesh))
-                    _originalBlendshapeValues[shape.mesh] = new Dictionary<int, float>();
-
-                if (!_originalBlendshapeValues[shape.mesh].ContainsKey(index))
-                    _originalBlendshapeValues[shape.mesh][index] = shape.mesh.GetBlendShapeWeight(index);
+                SaveOriginalBlendshapeValue(shape.mesh, index);
 
                 // Apply the configured value
                 shape.mesh.SetBlendShapeWeight(index, shape.value);

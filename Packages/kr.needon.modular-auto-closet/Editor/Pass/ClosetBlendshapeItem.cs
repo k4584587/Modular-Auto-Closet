@@ -105,9 +105,6 @@ namespace needon.Editor.Pass
                 var labelValue = needon.Editor.Util.ClosetLocalization.Get(ctx, "Drawer.Common.Value");
                 EditorGUI.BeginDisabledGroup(!selectable);
 
-                // Store old value to detect changes
-                float oldValue = valueProp.floatValue;
-
                 EditorGUI.BeginChangeCheck();
                 float newValue = selectable
                     ? EditorGUI.Slider(new Rect(position.x + padding, y, position.width - 2 * padding, lineHeight), labelValue, valueProp.floatValue, 0f, 100f)
