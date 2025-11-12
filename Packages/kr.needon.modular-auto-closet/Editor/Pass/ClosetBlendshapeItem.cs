@@ -104,9 +104,19 @@ namespace needon.Editor.Pass
                 bool selectable = !string.IsNullOrEmpty(shapeKeyProp.stringValue);
                 var labelValue = needon.Editor.Util.ClosetLocalization.Get(ctx, "Drawer.Common.Value");
                 EditorGUI.BeginDisabledGroup(!selectable);
-                valueProp.floatValue = selectable
+
+                EditorGUI.BeginChangeCheck();
+                float newValue = selectable
                     ? EditorGUI.Slider(new Rect(position.x + padding, y, position.width - 2 * padding, lineHeight), labelValue, valueProp.floatValue, 0f, 100f)
                     : EditorGUI.Slider(new Rect(position.x + padding, y, position.width - 2 * padding, lineHeight), labelValue, 0f, 0f, 100f);
+
+                if (EditorGUI.EndChangeCheck() && selectable)
+                {
+                    valueProp.floatValue = newValue;
+                    // Apply preview immediately when slider changes
+                    ClosetConfigEditor.ApplyBlendshapePreview(smr, shapeKeyProp.stringValue, newValue);
+                }
+
                 EditorGUI.EndDisabledGroup();
                 y += lineHeight + fieldSpacing;
             }
