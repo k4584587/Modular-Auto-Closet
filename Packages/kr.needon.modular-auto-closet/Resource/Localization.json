@@ -8,6 +8,8 @@
     "ClosetConfig.Help.Toggles": "Turn objects ON/OFF when this clothing is toggled.",
     "ClosetConfig.Section.Shapes": "Blendshapes",
     "ClosetConfig.Help.Shapes": "Apply these blendshape values when this clothing is toggled.",
+    "ClosetConfig.Preview.Enable": "Preview",
+    "ClosetConfig.Preview.Warning": "⚠️ Use Blendshape Preview for visualization only. This feature temporarily modifies mesh values in the scene and will restore original values when Preview is disabled or another object is selected.",
     "ClosetConfig.Section.Drivers": "Parameter Drivers",
     "ClosetConfig.Help.Drivers": "Control avatar parameters when this clothing is selected. Other clothing will automatically use the opposite value to reset the parameter.",
 
@@ -60,6 +62,8 @@
     "ClosetConfig.Help.Toggles": "이 옷을 토글할 때 켜거나 끌 오브젝트 목록입니다.",
     "ClosetConfig.Section.Shapes": "블렌드셰이프",
     "ClosetConfig.Help.Shapes": "이 옷을 토글할 때 적용할 블렌드셰이프 값입니다.",
+    "ClosetConfig.Preview.Enable": "미리보기",
+    "ClosetConfig.Preview.Warning": "⚠️ 블렌드셰이프 미리보기는 확인 용도로만 사용하세요. 이 기능은 씬의 메쉬 값을 임시로 변경하며, Preview를 끄거나 다른 오브젝트를 선택하면 원래 값으로 복원됩니다.",
     "ClosetConfig.Section.Drivers": "파라미터 드라이버",
     "ClosetConfig.Help.Drivers": "이 옷을 선택할 때 아바타 파라미터를 제어합니다. 다른 옷에서는 자동으로 반대 값을 사용하여 파라미터를 리셋합니다.",
 
@@ -112,6 +116,8 @@
     "ClosetConfig.Help.Toggles": "この衣装をトグルした際にON/OFFするオブジェクトです。",
     "ClosetConfig.Section.Shapes": "ブレンドシェイプ",
     "ClosetConfig.Help.Shapes": "この衣装をトグルした際に適用するブレンドシェイプ値です。",
+    "ClosetConfig.Preview.Enable": "プレビュー",
+    "ClosetConfig.Preview.Warning": "⚠️ ブレンドシェイプのプレビューは確認用途でのみ使用してください。この機能はシーン内のメッシュ値を一時的に変更し、プレビューをオフにするか別のオブジェクトを選択すると元の値に復元されます。",
     "ClosetConfig.Section.Drivers": "パラメータ ドライバー",
     "ClosetConfig.Help.Drivers": "この衣装を選択した際にアバターパラメータを制御します。他の衣装では自動的に反対の値を使用してパラメータをリセットします。",
 
