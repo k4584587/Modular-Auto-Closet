@@ -115,9 +115,11 @@ namespace needon.Editor.Pass
         {
             var stateOff = sm.AddState($"{paramName}_Off");
             stateOff.motion = offClip;
+            stateOff.writeDefaultValues = true;
 
             var stateOn = sm.AddState($"{paramName}_On");
             stateOn.motion = onClip;
+            stateOn.writeDefaultValues = true;
 
             // Off -> On
             var tOn = stateOff.AddTransition(stateOn);
