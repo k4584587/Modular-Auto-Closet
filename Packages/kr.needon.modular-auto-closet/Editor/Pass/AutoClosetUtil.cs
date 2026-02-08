@@ -112,10 +112,11 @@ namespace needon.Editor.Pass
             // 아바타 루트 찾기
             var avatarRoot = closet.transform.root;
 
-            // 동일한 SkinnedMeshRenderer/BlendShape 바인딩이 여러 의상에서 설정될 때
-            // 비활성(0) 값이 활성 의상의 값(>0)을 덮어쓰는 문제를 방지하기 위한 집계 맵
+            // WD OFF 대응: 모든 상태에서 모든 프로퍼티를 명시적으로 애니메이션하여
+            // MMD 월드 등 외부 시스템에 의한 블렌드셰이프/토글 값 오버라이드를 방지
             // key: path|propertyName, value: (binding, curve)
             var blendshapeCurves = new Dictionary<string, (EditorCurveBinding binding, AnimationCurve curve)>();
+            var toggleCurves = new Dictionary<string, (EditorCurveBinding binding, AnimationCurve curve)>();
 
             // 모든 옷장 자식(옷)의 활성화 상태를 애니메이션으로 기록
             foreach (Transform child in closet.transform)
@@ -143,19 +144,27 @@ namespace needon.Editor.Pass
                 var closetConfig = child.GetComponent<ClosetConfig>();
                 if (closetConfig != null)
                 {
-                    // Toggles (only when this clothing is active)
-                    if (isActive && closetConfig.toggles != null)
+                    // Toggles - WD OFF 대응: 모든 의상의 토글을 명시적으로 애니메이션
+                    // 활성 의상: 설정값 사용, 비활성 의상: 반대값으로 리셋
+                    if (closetConfig.toggles != null)
                     {
                         foreach (var toggle in closetConfig.toggles)
                         {
                             if (toggle == null || toggle.target == null) continue;
 
-                            var toggleCurve = new AnimationCurve(
-                                new Keyframe(0f, toggle.active ? 1f : 0f)
-                            );
+                            // 활성 의상: 설정된 값, 비활성 의상: 반대값(리셋)
+                            float toggleValue;
+                            if (isActive)
+                            {
+                                toggleValue = toggle.active ? 1f : 0f;
+                            }
+                            else
+                            {
+                                toggleValue = toggle.active ? 0f : 1f;
+                            }
 
                             var togglePath = GetRelativePath(toggle.target.transform, avatarRoot);
-                            needon.Editor.Util.ClosetLogger.Log(child, "Log.Toggle.Path", togglePath, toggle.active);
+                            needon.Editor.Util.ClosetLogger.Log(child, "Log.Toggle.Path", togglePath, isActive);
 
                             var toggleBinding = EditorCurveBinding.FloatCurve(
                                 togglePath,
@@ -163,7 +172,16 @@ namespace needon.Editor.Pass
                                 "m_IsActive"
                             );
 
-                            AnimationUtility.SetEditorCurve(clip, toggleBinding, toggleCurve);
+                            var toggleKey = toggleBinding.path + "|m_IsActive";
+                            if (!toggleCurves.ContainsKey(toggleKey))
+                            {
+                                toggleCurves[toggleKey] = (toggleBinding, new AnimationCurve(new Keyframe(0f, toggleValue)));
+                            }
+                            else if (isActive)
+                            {
+                                // 활성 의상의 토글 값이 최우선
+                                toggleCurves[toggleKey] = (toggleBinding, new AnimationCurve(new Keyframe(0f, toggleValue)));
+                            }
                         }
                     }
 
@@ -202,29 +220,41 @@ namespace needon.Editor.Pass
                 else
                 {
                     // Fallback to legacy components for backward compatibility
-                    if (isActive)
+                    // Toggles - WD OFF 대응: 레거시에서도 모든 의상의 토글을 명시적으로 애니메이션
+                    var closetToggle = child.GetComponent<ClosetToggle>();
+                    if (closetToggle != null && closetToggle.toggles != null)
                     {
-                        var closetToggle = child.GetComponent<ClosetToggle>();
-                        if (closetToggle != null && closetToggle.toggles != null)
+                        foreach (var toggle in closetToggle.toggles)
                         {
-                            foreach (var toggle in closetToggle.toggles)
+                            if (toggle == null || toggle.target == null) continue;
+
+                            float toggleValue;
+                            if (isActive)
                             {
-                                if (toggle == null || toggle.target == null) continue;
+                                toggleValue = toggle.active ? 1f : 0f;
+                            }
+                            else
+                            {
+                                toggleValue = toggle.active ? 0f : 1f;
+                            }
 
-                                var toggleCurve = new AnimationCurve(
-                                    new Keyframe(0f, toggle.active ? 1f : 0f)
-                                );
+                            var togglePath = GetRelativePath(toggle.target.transform, avatarRoot);
+                            needon.Editor.Util.ClosetLogger.Log(child, "Log.Toggle.Path", togglePath, isActive);
 
-                                var togglePath = GetRelativePath(toggle.target.transform, avatarRoot);
-                                needon.Editor.Util.ClosetLogger.Log(child, "Log.Toggle.Path", togglePath, toggle.active);
+                            var toggleBinding = EditorCurveBinding.FloatCurve(
+                                togglePath,
+                                typeof(GameObject),
+                                "m_IsActive"
+                            );
 
-                                var toggleBinding = EditorCurveBinding.FloatCurve(
-                                    togglePath,
-                                    typeof(GameObject),
-                                    "m_IsActive"
-                                );
-
-                                AnimationUtility.SetEditorCurve(clip, toggleBinding, toggleCurve);
+                            var toggleKey = toggleBinding.path + "|m_IsActive";
+                            if (!toggleCurves.ContainsKey(toggleKey))
+                            {
+                                toggleCurves[toggleKey] = (toggleBinding, new AnimationCurve(new Keyframe(0f, toggleValue)));
+                            }
+                            else if (isActive)
+                            {
+                                toggleCurves[toggleKey] = (toggleBinding, new AnimationCurve(new Keyframe(0f, toggleValue)));
                             }
                         }
                     }
@@ -260,7 +290,12 @@ namespace needon.Editor.Pass
                 }
             }
 
-            // 애니메이션 저장
+            // 누적된 토글 곡선을 한 번만 기록 (중복 덮어쓰기 방지)
+            foreach (var kv in toggleCurves.Values)
+            {
+                AnimationUtility.SetEditorCurve(clip, kv.binding, kv.curve);
+            }
+
             // 누적된 블렌드셰이프 곡선을 한 번만 기록 (중복 덮어쓰기 방지)
             foreach (var kv in blendshapeCurves.Values)
             {

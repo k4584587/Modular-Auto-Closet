@@ -138,7 +138,7 @@ namespace needon.Editor.Pass
             var defaultClip = AutoClosetUtil.CreateClosetAnimationClip(closet, parentName, defaultClothes.name);
             var defaultState = stateMachine.AddState(defaultClothes.name, new Vector3(300, 0, 0));
             defaultState.motion = defaultClip;
-            defaultState.writeDefaultValues = true;
+            defaultState.writeDefaultValues = false;
             stateMachine.defaultState = defaultState;
 
             var anyToDefaultTransition = stateMachine.AddAnyStateTransition(defaultState);
@@ -158,7 +158,7 @@ namespace needon.Editor.Pass
                 var stateClip = AutoClosetUtil.CreateClosetAnimationClip(closet, parentName, child.name);
                 var newState = stateMachine.AddState(child.name, new Vector3(300, index * 60, 0));
                 newState.motion = stateClip;
-                newState.writeDefaultValues = true;
+                newState.writeDefaultValues = false;
 
                 var anyStateTransition = stateMachine.AddAnyStateTransition(newState);
                 ConfigureTransition(anyStateTransition, index, uniqueName);
@@ -175,6 +175,7 @@ namespace needon.Editor.Pass
             transition.hasExitTime = false;
             transition.exitTime = 0f;
             transition.duration = 0f;
+            transition.canTransitionToSelf = false;
             transition.AddCondition(AnimatorConditionMode.Equals, parameterValue, uniqueName);
         }
 
