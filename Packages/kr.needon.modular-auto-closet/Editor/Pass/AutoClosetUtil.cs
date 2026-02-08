@@ -153,15 +153,7 @@ namespace needon.Editor.Pass
                             if (toggle == null || toggle.target == null) continue;
 
                             // 활성 의상: 설정된 값, 비활성 의상: 반대값(리셋)
-                            float toggleValue;
-                            if (isActive)
-                            {
-                                toggleValue = toggle.active ? 1f : 0f;
-                            }
-                            else
-                            {
-                                toggleValue = toggle.active ? 0f : 1f;
-                            }
+                            float toggleValue = (isActive == toggle.active) ? 1f : 0f;
 
                             var togglePath = GetRelativePath(toggle.target.transform, avatarRoot);
                             needon.Editor.Util.ClosetLogger.Log(child, "Log.Toggle.Path", togglePath, isActive);
@@ -172,16 +164,7 @@ namespace needon.Editor.Pass
                                 "m_IsActive"
                             );
 
-                            var toggleKey = toggleBinding.path + "|m_IsActive";
-                            if (!toggleCurves.ContainsKey(toggleKey))
-                            {
-                                toggleCurves[toggleKey] = (toggleBinding, new AnimationCurve(new Keyframe(0f, toggleValue)));
-                            }
-                            else if (isActive)
-                            {
-                                // 활성 의상의 토글 값이 최우선
-                                toggleCurves[toggleKey] = (toggleBinding, new AnimationCurve(new Keyframe(0f, toggleValue)));
-                            }
+                            AccumulateToggleCurve(toggleCurves, toggleBinding, toggleValue, isActive);
                         }
                     }
 
@@ -228,15 +211,7 @@ namespace needon.Editor.Pass
                         {
                             if (toggle == null || toggle.target == null) continue;
 
-                            float toggleValue;
-                            if (isActive)
-                            {
-                                toggleValue = toggle.active ? 1f : 0f;
-                            }
-                            else
-                            {
-                                toggleValue = toggle.active ? 0f : 1f;
-                            }
+                            float toggleValue = (isActive == toggle.active) ? 1f : 0f;
 
                             var togglePath = GetRelativePath(toggle.target.transform, avatarRoot);
                             needon.Editor.Util.ClosetLogger.Log(child, "Log.Toggle.Path", togglePath, isActive);
@@ -247,15 +222,7 @@ namespace needon.Editor.Pass
                                 "m_IsActive"
                             );
 
-                            var toggleKey = toggleBinding.path + "|m_IsActive";
-                            if (!toggleCurves.ContainsKey(toggleKey))
-                            {
-                                toggleCurves[toggleKey] = (toggleBinding, new AnimationCurve(new Keyframe(0f, toggleValue)));
-                            }
-                            else if (isActive)
-                            {
-                                toggleCurves[toggleKey] = (toggleBinding, new AnimationCurve(new Keyframe(0f, toggleValue)));
-                            }
+                            AccumulateToggleCurve(toggleCurves, toggleBinding, toggleValue, isActive);
                         }
                     }
 
@@ -450,6 +417,24 @@ namespace needon.Editor.Pass
             }
 
             needon.Editor.Util.ClosetLogger.Log(state, "Log.ParameterDriver.Applied", driver.parameters.Count);
+        }
+
+        /// <summary>
+        /// 토글 커브를 딕셔너리에 누적합니다. 활성 의상의 값이 최우선으로 적용됩니다.
+        /// </summary>
+        private static void AccumulateToggleCurve(
+            Dictionary<string, (EditorCurveBinding binding, AnimationCurve curve)> toggleCurves,
+            EditorCurveBinding binding, float value, bool isActive)
+        {
+            var key = binding.path + "|m_IsActive";
+            if (!toggleCurves.ContainsKey(key))
+            {
+                toggleCurves[key] = (binding, new AnimationCurve(new Keyframe(0f, value)));
+            }
+            else if (isActive)
+            {
+                toggleCurves[key] = (binding, new AnimationCurve(new Keyframe(0f, value)));
+            }
         }
     }
 }
