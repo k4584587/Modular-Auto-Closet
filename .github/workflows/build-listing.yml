@@ -11,7 +11,7 @@ on:
     types:
       - completed
   release:
-    types: [published, created, edited, unpublished, deleted, released]
+    types: [published]
 
 permissions:
   contents: read
