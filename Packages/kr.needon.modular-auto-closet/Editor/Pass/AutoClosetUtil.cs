@@ -1,4 +1,6 @@
 ﻿using System;
+using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
@@ -11,6 +13,14 @@ namespace needon.Editor.Pass
 {
     internal static class AutoClosetUtil
     {
+        private static readonly char[] InvalidFileNameChars = Path.GetInvalidFileNameChars();
+
+        private static string SanitizeFileName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return "_";
+            return new string(name.Select(c => InvalidFileNameChars.Contains(c) ? '_' : c).ToArray());
+        }
+
         private static AnimatorControllerLayer AddLayer(AnimatorController animator, string layerName)
         {
             var layer = new AnimatorControllerLayer();
@@ -87,7 +97,9 @@ namespace needon.Editor.Pass
 
         public static AnimationClip CreateClosetAnimationClip(GameObject closet, string parentName, string activeClothesName)
         {
-            var clipPath = $"Packages/nadena.dev.ndmf/__Generated/{parentName}/_assets/{activeClothesName}.anim";
+            var safeParentName = SanitizeFileName(parentName);
+            var safeClothesName = SanitizeFileName(activeClothesName);
+            var clipPath = $"Packages/nadena.dev.ndmf/__Generated/{safeParentName}/_assets/{safeClothesName}.anim";
 
             // 디렉토리가 없으면 생성
             var directory = System.IO.Path.GetDirectoryName(clipPath);
@@ -314,8 +326,10 @@ namespace needon.Editor.Pass
         {
             // On/Off 구분 접미사
             var suffix = isOn ? "On" : "Off";
+            var safeParentName = SanitizeFileName(parentName);
+            var safeClipName = SanitizeFileName(clipName);
             // Packages/nadena.dev.ndmf/__Generated/{parentName}/_assets/{clipName}_{On|Off}.anim
-            var clipPath = $"Packages/nadena.dev.ndmf/__Generated/{parentName}/_assets/{clipName}_{suffix}.anim";
+            var clipPath = $"Packages/nadena.dev.ndmf/__Generated/{safeParentName}/_assets/{safeClipName}_{suffix}.anim";
 
             // 디렉토리 생성
             var directory = System.IO.Path.GetDirectoryName(clipPath);
