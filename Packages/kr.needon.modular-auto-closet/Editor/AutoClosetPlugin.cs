@@ -18,6 +18,11 @@ namespace needon.Editor
                     s.Run(ApplyAutoClosetPass.Instance)
                      .Then.Run(ApplyToggleCreatorPass.Instance)
                      .Then.Run(ApplyStandaloneTogglePass.Instance));
+
+            // Optimizing: 다른 툴이 레이어 Weight를 0으로 초기화하는 문제를 최종 복원
+            InPhase(BuildPhase.Optimizing)
+                .WithRequiredExtension(typeof(AutoClosetContext), s =>
+                    s.Run(EnsureLayerWeightsPass.Instance));
         }
     }   
 }

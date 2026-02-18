@@ -53,7 +53,7 @@ namespace needon.Editor.Pass
                     var layerIndex = FindAutoClosetLayerIndex(uniqueName);
                     var stateMachine = _autoClosetController.layers[layerIndex].stateMachine;
 
-                    CreateClosetStates(closetGameObject, stateMachine, uniqueName, context);
+                    CreateClosetStates(closetGameObject, stateMachine, uniqueName, context, layerIndex);
                 }
             }
             catch (Exception e)
@@ -118,7 +118,7 @@ namespace needon.Editor.Pass
 
         }
 
-        private void CreateClosetStates(GameObject closet, AnimatorStateMachine stateMachine, string uniqueName, BuildContext context)
+        private void CreateClosetStates(GameObject closet, AnimatorStateMachine stateMachine, string uniqueName, BuildContext context, int layerIndex)
         {
             var parentName = closet.transform.parent != null ? closet.transform.parent.name : closet.name;
             var defaultClothes = closet.transform.GetChild(0);
@@ -127,13 +127,13 @@ namespace needon.Editor.Pass
             var parameterResetInfo = CollectParameterResetInfo(closet, context);
 
             // 기본 옷 상태 생성
-            CreateDefaultClothesState(closet, parentName, defaultClothes, stateMachine, uniqueName, parameterResetInfo);
+            CreateDefaultClothesState(closet, parentName, defaultClothes, stateMachine, uniqueName, parameterResetInfo, layerIndex);
 
             // 추가 옷 상태 생성
-            CreateAdditionalClothesStates(closet, parentName, defaultClothes, stateMachine, uniqueName, parameterResetInfo);
+            CreateAdditionalClothesStates(closet, parentName, defaultClothes, stateMachine, uniqueName, parameterResetInfo, layerIndex);
         }
 
-        private void CreateDefaultClothesState(GameObject closet, string parentName, Transform defaultClothes, AnimatorStateMachine stateMachine, string uniqueName, Dictionary<string, ParameterResetInfo> parameterResetInfo)
+        private void CreateDefaultClothesState(GameObject closet, string parentName, Transform defaultClothes, AnimatorStateMachine stateMachine, string uniqueName, Dictionary<string, ParameterResetInfo> parameterResetInfo, int layerIndex)
         {
             var defaultClip = AutoClosetUtil.CreateClosetAnimationClip(closet, parentName, defaultClothes.name);
             var defaultState = stateMachine.AddState(defaultClothes.name, new Vector3(300, 0, 0));
@@ -146,9 +146,12 @@ namespace needon.Editor.Pass
 
             // 파라미터 드라이버 적용 (스마트 리셋 포함)
             ApplyParameterDriversToClothes(defaultClothes, defaultState, parameterResetInfo);
+
+            // 레이어 Weight 보호: AFK 등으로 Weight가 0이 되는 것을 방지
+            AutoClosetUtil.ApplyLayerWeightControl(defaultState, layerIndex);
         }
 
-        private void CreateAdditionalClothesStates(GameObject closet, string parentName, Transform defaultClothes, AnimatorStateMachine stateMachine, string uniqueName, Dictionary<string, ParameterResetInfo> parameterResetInfo)
+        private void CreateAdditionalClothesStates(GameObject closet, string parentName, Transform defaultClothes, AnimatorStateMachine stateMachine, string uniqueName, Dictionary<string, ParameterResetInfo> parameterResetInfo, int layerIndex)
         {
             var index = 1;
             foreach (Transform child in closet.transform)
@@ -165,6 +168,9 @@ namespace needon.Editor.Pass
 
                 // 파라미터 드라이버 적용 (스마트 리셋 포함)
                 ApplyParameterDriversToClothes(child, newState, parameterResetInfo);
+
+                // 레이어 Weight 보호: AFK 등으로 Weight가 0이 되는 것을 방지
+                AutoClosetUtil.ApplyLayerWeightControl(newState, layerIndex);
 
                 index++;
             }

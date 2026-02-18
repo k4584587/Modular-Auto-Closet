@@ -66,8 +66,12 @@ namespace needon.Editor.Pass
                     MergeClip(offClip, clipOff);
                 }
 
+                // 레이어 인덱스 계산
+                var layerIndex = Array.FindIndex(fxController.layers, l => l.stateMachine == sm);
+                if (layerIndex < 0) layerIndex = fxController.layers.Length - 1;
+
                 // 5) 상태/전이 구성 (즉시 전이 + WD OFF)
-                AddStates(sm, paramName, onClip, offClip);
+                AddStates(sm, paramName, onClip, offClip, layerIndex);
 
                 // 6) 초기 상태 - 파라미터 기본값/아이템 기본값에 맞춤
                 var wantOn = items.Any(x => x.active);
@@ -164,15 +168,15 @@ namespace needon.Editor.Pass
             t.canTransitionToSelf = false;
         }
 
-        private static void AddStates(AnimatorStateMachine sm, string paramName, AnimationClip onClip, AnimationClip offClip)
+        private static void AddStates(AnimatorStateMachine sm, string paramName, AnimationClip onClip, AnimationClip offClip, int layerIndex)
         {
             var stateOff = sm.AddState($"{paramName}_Off");
             stateOff.motion = offClip;
-            stateOff.writeDefaultValues = true;
+            stateOff.writeDefaultValues = false;
 
             var stateOn = sm.AddState($"{paramName}_On");
             stateOn.motion = onClip;
-            stateOn.writeDefaultValues = true;
+            stateOn.writeDefaultValues = false;
 
             // Off -> On
             var tOn = stateOff.AddTransition(stateOn);
@@ -189,6 +193,10 @@ namespace needon.Editor.Pass
                 MakeInstant(tr);
             foreach (var tr in stateOn.transitions.Where(x => x.destinationState == stateOff))
                 MakeInstant(tr);
+
+            // 레이어 Weight 보호: AFK 등으로 Weight가 0이 되는 것을 방지
+            AutoClosetUtil.ApplyLayerWeightControl(stateOff, layerIndex);
+            AutoClosetUtil.ApplyLayerWeightControl(stateOn, layerIndex);
         }
 
         private static void MakeInstant(AnimatorStateTransition t)
