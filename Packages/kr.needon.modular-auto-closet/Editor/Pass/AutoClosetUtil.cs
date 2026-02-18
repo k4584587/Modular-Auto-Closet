@@ -5,6 +5,7 @@ using UnityEngine;
 using VRC.SDK3.Avatars.Components;
 using System.Collections.Generic;
 using VRC.SDKBase;
+using VRC_AnimatorLayerControl = VRC.SDKBase.VRC_AnimatorLayerControl;
 
 namespace needon.Editor.Pass
 {
@@ -123,9 +124,11 @@ namespace needon.Editor.Pass
             {
                 var isActive = (child.name == activeClothesName);
 
-                // 단일 키프레임만 사용하여 0초 시점에만 값을 기록
+                // 두 키프레임으로 클립 길이를 확보 (VRChat 안정성)
+                var val = isActive ? 1f : 0f;
                 var curve = new AnimationCurve(
-                    new Keyframe(0f, isActive ? 1f : 0f)
+                    new Keyframe(0f, val),
+                    new Keyframe(1f / 60f, val)
                 );
 
                 // 아바타 루트로부터의 상대 경로 계산
@@ -190,12 +193,12 @@ namespace needon.Editor.Pass
                             var key = bsBinding.path + "|" + bsBinding.propertyName;
                             if (!blendshapeCurves.ContainsKey(key))
                             {
-                                blendshapeCurves[key] = (bsBinding, new AnimationCurve(new Keyframe(0f, value)));
+                                blendshapeCurves[key] = (bsBinding, new AnimationCurve(new Keyframe(0f, value), new Keyframe(1f / 60f, value)));
                             }
                             else if (isActive)
                             {
                                 // 활성 의상의 값이 최우선이며, 비활성(0) 값으로는 덮어쓰지 않음
-                                blendshapeCurves[key] = (bsBinding, new AnimationCurve(new Keyframe(0f, value)));
+                                blendshapeCurves[key] = (bsBinding, new AnimationCurve(new Keyframe(0f, value), new Keyframe(1f / 60f, value)));
                             }
                         }
                     }
@@ -246,11 +249,11 @@ namespace needon.Editor.Pass
                             var key = bsBinding.path + "|" + bsBinding.propertyName;
                             if (!blendshapeCurves.ContainsKey(key))
                             {
-                                blendshapeCurves[key] = (bsBinding, new AnimationCurve(new Keyframe(0f, value)));
+                                blendshapeCurves[key] = (bsBinding, new AnimationCurve(new Keyframe(0f, value), new Keyframe(1f / 60f, value)));
                             }
                             else if (isActive)
                             {
-                                blendshapeCurves[key] = (bsBinding, new AnimationCurve(new Keyframe(0f, value)));
+                                blendshapeCurves[key] = (bsBinding, new AnimationCurve(new Keyframe(0f, value), new Keyframe(1f / 60f, value)));
                             }
                         }
                     }
@@ -330,8 +333,9 @@ namespace needon.Editor.Pass
             var relativePath = GetRelativePath(target.transform, root);
             needon.Editor.Util.ClosetLogger.Log(target, "Log.Toggle.SetPath", relativePath, isOn ? 1f : 0f);
 
-            // 단일 키프레임 커브(0초에만 값 기록)
-            var curve = new AnimationCurve(new Keyframe(0f, isOn ? 1f : 0f));
+            // 두 키프레임 커브로 클립 길이 확보 (VRChat 안정성)
+            var toggleVal = isOn ? 1f : 0f;
+            var curve = new AnimationCurve(new Keyframe(0f, toggleVal), new Keyframe(1f / 60f, toggleVal));
             var bindingInfo = EditorCurveBinding.FloatCurve(
                 relativePath,
                 typeof(GameObject),
@@ -420,6 +424,19 @@ namespace needon.Editor.Pass
         }
 
         /// <summary>
+        /// 레이어 가중치 보호: 각 상태 진입 시 레이어 Weight를 1로 강제 복원합니다.
+        /// AFK 등 외부 요인으로 Weight가 0으로 변경되는 것을 방지합니다.
+        /// </summary>
+        public static void ApplyLayerWeightControl(AnimatorState state, int layerIndex)
+        {
+            var layerControl = state.AddStateMachineBehaviour<VRCAnimatorLayerControl>();
+            layerControl.playable = VRC_AnimatorLayerControl.BlendableLayer.FX;
+            layerControl.layer = layerIndex;
+            layerControl.goalWeight = 1f;
+            layerControl.blendDuration = 0f;
+        }
+
+        /// <summary>
         /// 토글 커브를 딕셔너리에 누적합니다. 활성 의상의 값이 최우선으로 적용됩니다.
         /// </summary>
         private static void AccumulateToggleCurve(
@@ -429,11 +446,11 @@ namespace needon.Editor.Pass
             var key = binding.path + "|m_IsActive";
             if (!toggleCurves.ContainsKey(key))
             {
-                toggleCurves[key] = (binding, new AnimationCurve(new Keyframe(0f, value)));
+                toggleCurves[key] = (binding, new AnimationCurve(new Keyframe(0f, value), new Keyframe(1f / 60f, value)));
             }
             else if (isActive)
             {
-                toggleCurves[key] = (binding, new AnimationCurve(new Keyframe(0f, value)));
+                toggleCurves[key] = (binding, new AnimationCurve(new Keyframe(0f, value), new Keyframe(1f / 60f, value)));
             }
         }
     }

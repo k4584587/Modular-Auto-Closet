@@ -84,16 +84,22 @@ namespace needon.Editor.Pass
                             $"blendShape.{item.shapeKey}"
                         );
 
-                        var curveOn = new AnimationCurve(new Keyframe(0f, item.active ? item.value : 0f));
-                        var curveOff = new AnimationCurve(new Keyframe(0f, item.active ? 0f : item.value));
+                        var onVal = item.active ? item.value : 0f;
+                        var offVal = item.active ? 0f : item.value;
+                        var curveOn = new AnimationCurve(new Keyframe(0f, onVal), new Keyframe(1f / 60f, onVal));
+                        var curveOff = new AnimationCurve(new Keyframe(0f, offVal), new Keyframe(1f / 60f, offVal));
 
                         AnimationUtility.SetEditorCurve(onClip, binding, curveOn);
                         AnimationUtility.SetEditorCurve(offClip, binding, curveOff);
                     }
                 }
 
+                // 레이어 인덱스 계산 (이름으로 검색하여 안정성 확보)
+                var layerIndex = Array.FindIndex(fxController.layers, l => l.name == paramName);
+                if (layerIndex < 0) layerIndex = fxController.layers.Length - 1;
+
                 // 상태와 트랜지션 생성
-                AddStates(sm, paramName, onClip, offClip);
+                AddStates(sm, paramName, onClip, offClip, layerIndex);
             }
 
             EditorUtility.SetDirty(fxController);
@@ -111,15 +117,15 @@ namespace needon.Editor.Pass
         }
 
 // Off/On 상태와 파라미터 기반 전환을 추가합니다.
-        private static void AddStates(AnimatorStateMachine sm, string paramName, AnimationClip onClip, AnimationClip offClip)
+        private static void AddStates(AnimatorStateMachine sm, string paramName, AnimationClip onClip, AnimationClip offClip, int layerIndex)
         {
             var stateOff = sm.AddState($"{paramName}_Off");
             stateOff.motion = offClip;
-            stateOff.writeDefaultValues = true;
+            stateOff.writeDefaultValues = false;
 
             var stateOn = sm.AddState($"{paramName}_On");
             stateOn.motion = onClip;
-            stateOn.writeDefaultValues = true;
+            stateOn.writeDefaultValues = false;
 
             // Off -> On
             var tOn = stateOff.AddTransition(stateOn);
@@ -134,6 +140,10 @@ namespace needon.Editor.Pass
             // 혹시 중복 전이가 생겼다면 모두 0초로 통일
             foreach (var tr in stateOff.transitions.Where(x => x.destinationState == stateOn)) MakeInstant(tr);
             foreach (var tr in stateOn.transitions.Where(x => x.destinationState == stateOff)) MakeInstant(tr);
+
+            // 레이어 Weight 보호: AFK 등으로 Weight가 0이 되는 것을 방지
+            AutoClosetUtil.ApplyLayerWeightControl(stateOff, layerIndex);
+            AutoClosetUtil.ApplyLayerWeightControl(stateOn, layerIndex);
         }
 
         private static void MakeInstant(AnimatorStateTransition t)
