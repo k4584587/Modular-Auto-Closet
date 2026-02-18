@@ -94,8 +94,9 @@ namespace needon.Editor.Pass
                     }
                 }
 
-                // 레이어 인덱스 계산
-                var layerIndex = fxController.layers.Length - 1;
+                // 레이어 인덱스 계산 (이름으로 검색하여 안정성 확보)
+                var layerIndex = Array.FindIndex(fxController.layers, l => l.name == paramName);
+                if (layerIndex < 0) layerIndex = fxController.layers.Length - 1;
 
                 // 상태와 트랜지션 생성
                 AddStates(sm, paramName, onClip, offClip, layerIndex);

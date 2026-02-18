@@ -66,8 +66,8 @@ namespace needon.Editor.Pass
                     MergeClip(offClip, clipOff);
                 }
 
-                // 레이어 인덱스 계산
-                var layerIndex = Array.FindIndex(fxController.layers, l => l.stateMachine == sm);
+                // 레이어 인덱스 계산 (이름으로 검색하여 안정성 확보)
+                var layerIndex = Array.FindIndex(fxController.layers, l => l.name == layer.name);
                 if (layerIndex < 0) layerIndex = fxController.layers.Length - 1;
 
                 // 5) 상태/전이 구성 (즉시 전이 + WD OFF)
