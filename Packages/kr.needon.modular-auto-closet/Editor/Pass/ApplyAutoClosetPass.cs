@@ -53,7 +53,7 @@ namespace needon.Editor.Pass
                     var layerIndex = FindAutoClosetLayerIndex(uniqueName);
                     var stateMachine = _autoClosetController.layers[layerIndex].stateMachine;
 
-                    CreateClosetStates(closetGameObject, stateMachine, uniqueName, context, layerIndex);
+                    CreateClosetStates(closetGameObject, stateMachine, uniqueName, context, layerIndex, closetComponent.writeDefaults);
                 }
             }
             catch (Exception e)
@@ -118,7 +118,7 @@ namespace needon.Editor.Pass
 
         }
 
-        private void CreateClosetStates(GameObject closet, AnimatorStateMachine stateMachine, string uniqueName, BuildContext context, int layerIndex)
+        private void CreateClosetStates(GameObject closet, AnimatorStateMachine stateMachine, string uniqueName, BuildContext context, int layerIndex, bool writeDefaults)
         {
             var parentName = closet.transform.parent != null ? closet.transform.parent.name : closet.name;
             var defaultClothes = closet.transform.GetChild(0);
@@ -127,18 +127,18 @@ namespace needon.Editor.Pass
             var parameterResetInfo = CollectParameterResetInfo(closet, context);
 
             // 기본 옷 상태 생성
-            CreateDefaultClothesState(closet, parentName, defaultClothes, stateMachine, uniqueName, parameterResetInfo, layerIndex);
+            CreateDefaultClothesState(closet, parentName, defaultClothes, stateMachine, uniqueName, parameterResetInfo, layerIndex, writeDefaults);
 
             // 추가 옷 상태 생성
-            CreateAdditionalClothesStates(closet, parentName, defaultClothes, stateMachine, uniqueName, parameterResetInfo, layerIndex);
+            CreateAdditionalClothesStates(closet, parentName, defaultClothes, stateMachine, uniqueName, parameterResetInfo, layerIndex, writeDefaults);
         }
 
-        private void CreateDefaultClothesState(GameObject closet, string parentName, Transform defaultClothes, AnimatorStateMachine stateMachine, string uniqueName, Dictionary<string, ParameterResetInfo> parameterResetInfo, int layerIndex)
+        private void CreateDefaultClothesState(GameObject closet, string parentName, Transform defaultClothes, AnimatorStateMachine stateMachine, string uniqueName, Dictionary<string, ParameterResetInfo> parameterResetInfo, int layerIndex, bool writeDefaults)
         {
             var defaultClip = AutoClosetUtil.CreateClosetAnimationClip(closet, parentName, defaultClothes.name);
             var defaultState = stateMachine.AddState(defaultClothes.name, new Vector3(300, 0, 0));
             defaultState.motion = defaultClip;
-            defaultState.writeDefaultValues = false;
+            defaultState.writeDefaultValues = writeDefaults;
             stateMachine.defaultState = defaultState;
 
             var anyToDefaultTransition = stateMachine.AddAnyStateTransition(defaultState);
@@ -151,7 +151,7 @@ namespace needon.Editor.Pass
             AutoClosetUtil.ApplyLayerWeightControl(defaultState, layerIndex);
         }
 
-        private void CreateAdditionalClothesStates(GameObject closet, string parentName, Transform defaultClothes, AnimatorStateMachine stateMachine, string uniqueName, Dictionary<string, ParameterResetInfo> parameterResetInfo, int layerIndex)
+        private void CreateAdditionalClothesStates(GameObject closet, string parentName, Transform defaultClothes, AnimatorStateMachine stateMachine, string uniqueName, Dictionary<string, ParameterResetInfo> parameterResetInfo, int layerIndex, bool writeDefaults)
         {
             var index = 1;
             foreach (Transform child in closet.transform)
@@ -161,7 +161,7 @@ namespace needon.Editor.Pass
                 var stateClip = AutoClosetUtil.CreateClosetAnimationClip(closet, parentName, child.name);
                 var newState = stateMachine.AddState(child.name, new Vector3(300, index * 60, 0));
                 newState.motion = stateClip;
-                newState.writeDefaultValues = false;
+                newState.writeDefaultValues = writeDefaults;
 
                 var anyStateTransition = stateMachine.AddAnyStateTransition(newState);
                 ConfigureTransition(anyStateTransition, index, uniqueName);

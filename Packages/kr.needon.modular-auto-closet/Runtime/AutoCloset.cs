@@ -25,6 +25,12 @@ public class AutoCloset : AvatarTagComponent
     /// </summary>
     public ClosetLanguage language = ClosetLanguage.Korean;
 
+    /// <summary>
+    /// Write Defaults setting for generated animator states.
+    /// When true, animator states use WD ON; when false, WD OFF (VRChat recommended).
+    /// </summary>
+    public bool writeDefaults = false;
+
     public IEnumerable Clothes;
 }
 #endif

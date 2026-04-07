@@ -11,6 +11,7 @@ namespace needon.Editor
         private SerializedObject _serialObj;
         private SerializedProperty _toggleRootName;
         private SerializedProperty _language;
+        private SerializedProperty _writeDefaults;
         private string _version;
 
         void OnEnable()
@@ -19,6 +20,7 @@ namespace needon.Editor
             _serialObj = new SerializedObject(_component);
             _toggleRootName = _serialObj.FindProperty("toggleRootName");
             _language = _serialObj.FindProperty("language");
+            _writeDefaults = _serialObj.FindProperty("writeDefaults");
 
             // Load version from package.json
             var pkg = AssetDatabase.LoadAssetAtPath<TextAsset>(
@@ -93,6 +95,13 @@ namespace needon.Editor
             EditorGUILayout.PropertyField(
                 _toggleRootName,
                 new GUIContent(needon.Editor.Util.ClosetLocalization.Get(_component, "AutoCloset.ToggleRootName")));
+
+            // Write Defaults toggle
+            EditorGUILayout.PropertyField(
+                _writeDefaults,
+                new GUIContent(
+                    needon.Editor.Util.ClosetLocalization.Get(_component, "AutoCloset.WriteDefaults"),
+                    needon.Editor.Util.ClosetLocalization.Get(_component, "AutoCloset.WriteDefaults.Tooltip")));
             GUILayout.Space(6);
 
             // Footer link

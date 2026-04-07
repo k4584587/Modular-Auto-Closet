@@ -70,8 +70,9 @@ namespace needon.Editor.Pass
                 var layerIndex = Array.FindIndex(fxController.layers, l => l.name == layer.name);
                 if (layerIndex < 0) layerIndex = fxController.layers.Length - 1;
 
-                // 5) 상태/전이 구성 (즉시 전이 + WD OFF)
-                AddStates(sm, paramName, onClip, offClip, layerIndex);
+                // 5) 상태/전이 구성
+                var writeDefaults = AutoClosetUtil.ResolveWriteDefaults(toggle.gameObject);
+                AddStates(sm, paramName, onClip, offClip, layerIndex, writeDefaults);
 
                 // 6) 초기 상태 - 파라미터 기본값/아이템 기본값에 맞춤
                 var wantOn = items.Any(x => x.active);
@@ -144,10 +145,9 @@ namespace needon.Editor.Pass
             }
         }
 
-        private static void ConfigureState(AnimatorState st)
+        private static void ConfigureState(AnimatorState st, bool writeDefaults)
         {
-            // VRChat 권장: WD OFF (충돌/깜빡임 방지)
-            st.writeDefaultValues = false;
+            st.writeDefaultValues = writeDefaults;
             st.speed = 1f;
             st.mirror = false;
             st.timeParameterActive = false;
@@ -168,15 +168,15 @@ namespace needon.Editor.Pass
             t.canTransitionToSelf = false;
         }
 
-        private static void AddStates(AnimatorStateMachine sm, string paramName, AnimationClip onClip, AnimationClip offClip, int layerIndex)
+        private static void AddStates(AnimatorStateMachine sm, string paramName, AnimationClip onClip, AnimationClip offClip, int layerIndex, bool writeDefaults)
         {
             var stateOff = sm.AddState($"{paramName}_Off");
             stateOff.motion = offClip;
-            stateOff.writeDefaultValues = false;
+            stateOff.writeDefaultValues = writeDefaults;
 
             var stateOn = sm.AddState($"{paramName}_On");
             stateOn.motion = onClip;
-            stateOn.writeDefaultValues = false;
+            stateOn.writeDefaultValues = writeDefaults;
 
             // Off -> On
             var tOn = stateOff.AddTransition(stateOn);
