@@ -456,14 +456,8 @@ namespace needon.Editor.Pass
         /// </summary>
         public static bool ResolveWriteDefaults(GameObject context)
         {
-            var t = context.transform;
-            while (t != null)
-            {
-                var closet = t.GetComponent<AutoCloset>();
-                if (closet != null) return closet.writeDefaults;
-                t = t.parent;
-            }
-            return false;
+            var closet = context.GetComponentInParent<AutoCloset>(true);
+            return closet != null && closet.writeDefaults;
         }
 
         /// <summary>
