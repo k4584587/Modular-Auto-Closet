@@ -115,6 +115,14 @@ CoPlay MCP `execute_script`로 아래 흐름 자동화:
 3. WD OFF 설정 → Manual Bake → 생성된 State 전수검사 → 복제본 삭제
 4. 원래 값으로 복원
 
+### v1.0.8-beta.1 검증 결과 (2026-04-07)
+- 대상: Plum 아바타, 옷장 컴포넌트
+- 컴파일 에러: 없음
+- **WD ON 테스트**: Manual Bake → 5 State 전수검사 → **PASS** (모두 writeDefaultValues=true)
+- **WD OFF 테스트**: Manual Bake → 5 State 전수검사 → **PASS** (모두 writeDefaultValues=false)
+- Inspector UI: Write Defaults 체크박스 정상 표시 (en/ko/ja 로컬라이즈 확인)
+- ResolveWriteDefaults: 부모 탐색으로 Toggle/Standalone Pass에서 WD 설정 정상 전달
+
 ## 주요 패턴
 
 - **부모 탐색 패턴**: `ClosetLocalization.ResolveLanguage()`, `AutoClosetUtil.ResolveWriteDefaults()` 모두 transform 부모를 타고 올라가며 AutoCloset을 찾음
