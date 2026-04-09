@@ -451,6 +451,16 @@ namespace needon.Editor.Pass
         }
 
         /// <summary>
+        /// 부모 계층에서 AutoCloset 컴포넌트를 찾아 writeDefaults 값을 반환합니다.
+        /// 찾지 못하면 false(WD OFF)를 반환합니다.
+        /// </summary>
+        public static bool ResolveWriteDefaults(GameObject context)
+        {
+            var closet = context.GetComponentInParent<AutoCloset>(true);
+            return closet != null && closet.writeDefaults;
+        }
+
+        /// <summary>
         /// 토글 커브를 딕셔너리에 누적합니다. 활성 의상의 값이 최우선으로 적용됩니다.
         /// </summary>
         private static void AccumulateToggleCurve(

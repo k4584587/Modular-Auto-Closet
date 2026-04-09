@@ -99,7 +99,8 @@ namespace needon.Editor.Pass
                 if (layerIndex < 0) layerIndex = fxController.layers.Length - 1;
 
                 // 상태와 트랜지션 생성
-                AddStates(sm, paramName, onClip, offClip, layerIndex);
+                var writeDefaults = AutoClosetUtil.ResolveWriteDefaults(toggle.gameObject);
+                AddStates(sm, paramName, onClip, offClip, layerIndex, writeDefaults);
             }
 
             EditorUtility.SetDirty(fxController);
@@ -117,15 +118,15 @@ namespace needon.Editor.Pass
         }
 
 // Off/On 상태와 파라미터 기반 전환을 추가합니다.
-        private static void AddStates(AnimatorStateMachine sm, string paramName, AnimationClip onClip, AnimationClip offClip, int layerIndex)
+        private static void AddStates(AnimatorStateMachine sm, string paramName, AnimationClip onClip, AnimationClip offClip, int layerIndex, bool writeDefaults)
         {
             var stateOff = sm.AddState($"{paramName}_Off");
             stateOff.motion = offClip;
-            stateOff.writeDefaultValues = false;
+            stateOff.writeDefaultValues = writeDefaults;
 
             var stateOn = sm.AddState($"{paramName}_On");
             stateOn.motion = onClip;
-            stateOn.writeDefaultValues = false;
+            stateOn.writeDefaultValues = writeDefaults;
 
             // Off -> On
             var tOn = stateOff.AddTransition(stateOn);

@@ -3,6 +3,8 @@
     "AutoCloset.Language": "Language",
     "AutoCloset.ToggleRootName": "Toggle Root Name",
     "AutoCloset.PlaceInsideAvatar": "Place this inside the avatar object.",
+    "AutoCloset.WriteDefaults": "Write Defaults",
+    "AutoCloset.WriteDefaults.Tooltip": "When enabled, animator states use Write Defaults ON. Default is OFF (VRChat recommended).",
 
     "ClosetConfig.Section.Toggles": "Object Toggles",
     "ClosetConfig.Help.Toggles": "Turn objects ON/OFF when this clothing is toggled.",
@@ -67,6 +69,8 @@
     "AutoCloset.Language": "언어",
     "AutoCloset.ToggleRootName": "토글 루트 이름",
     "AutoCloset.PlaceInsideAvatar": "아바타 오브젝트 내부에 배치해 주세요.",
+    "AutoCloset.WriteDefaults": "Write Defaults",
+    "AutoCloset.WriteDefaults.Tooltip": "활성화하면 애니메이터 스테이트가 Write Defaults ON을 사용합니다. 기본값은 OFF (VRChat 권장)입니다.",
 
     "ClosetConfig.Section.Toggles": "오브젝트 토글",
     "ClosetConfig.Help.Toggles": "이 옷을 토글할 때 켜거나 끌 오브젝트 목록입니다.",
@@ -131,6 +135,8 @@
     "AutoCloset.Language": "言語",
     "AutoCloset.ToggleRootName": "トグル ルート名",
     "AutoCloset.PlaceInsideAvatar": "アバター内に配置してください。",
+    "AutoCloset.WriteDefaults": "Write Defaults",
+    "AutoCloset.WriteDefaults.Tooltip": "有効にすると、アニメーターステートがWrite Defaults ONを使用します。デフォルトはOFF（VRChat推奨）です。",
 
     "ClosetConfig.Section.Toggles": "オブジェクト トグル",
     "ClosetConfig.Help.Toggles": "この衣装をトグルした際にON/OFFするオブジェクトです。",
