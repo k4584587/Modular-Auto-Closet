@@ -568,14 +568,17 @@ namespace needon.Editor.Pass
 
         private static void CountStatesWriteDefaults(AnimatorStateMachine sm, ref int on, ref int off)
         {
+            // 서브 에셋이 삭제된 손상 컨트롤러는 null 상태/서브 머신을 가질 수 있다.
             foreach (var child in sm.states)
             {
+                if (child.state == null) continue;
                 if (child.state.writeDefaultValues) on++;
                 else off++;
             }
 
             foreach (var childSm in sm.stateMachines)
             {
+                if (childSm.stateMachine == null) continue;
                 CountStatesWriteDefaults(childSm.stateMachine, ref on, ref off);
             }
         }

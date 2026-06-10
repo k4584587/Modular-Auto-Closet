@@ -18,6 +18,7 @@ namespace needon.Editor
         // FX 전체 상태를 순회하는 WD 감지를 리페인트마다 돌리지 않도록 컨트롤러 기준으로 캐싱
         private RuntimeAnimatorController _detectedWdController;
         private bool _detectedWd;
+        private bool _hasDetectedWd;
 
         void OnEnable()
         {
@@ -151,15 +152,19 @@ namespace needon.Editor
         // FX 컨트롤러 참조가 바뀐 경우에만 전체 상태 다수결을 다시 계산한다.
         private bool GetDetectedWriteDefaults(VRCAvatarDescriptor avatar)
         {
+            if (avatar.baseAnimationLayers == null)
+                return true;
+
             var fxLayer = System.Array.Find(
                 avatar.baseAnimationLayers,
                 item => item.type == VRCAvatarDescriptor.AnimLayerType.FX);
             var controller = fxLayer.animatorController;
 
-            if (controller == null || controller != _detectedWdController)
+            if (!_hasDetectedWd || controller != _detectedWdController)
             {
                 _detectedWd = needon.Editor.Pass.AutoClosetUtil.DetectAvatarWriteDefaults(avatar);
                 _detectedWdController = controller;
+                _hasDetectedWd = true;
             }
 
             return _detectedWd;
