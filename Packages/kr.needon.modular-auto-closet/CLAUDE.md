@@ -82,33 +82,20 @@ kr.needon.modular-auto-closet/
 
 ## Write Defaults (WD) 옵션
 
-`AutoCloset.writeDefaultsMode` (enum: Auto/On/Off, 기본 Auto)로 제어.
-v1.0.8의 `writeDefaults`(bool)에서 `[FormerlySerializedAs]`로 마이그레이션 (true→On, false→Auto).
+`AutoCloset.writeDefaults` (bool, 기본 false)로 제어.
 
-- **Auto**: 아바타의 기존 FX 상태들을 다수결로 감지해 맞춤. 단일 상태 BlendTree 레이어(DBT 관례)는 투표에서 제외. 동률/측정 불가 시 ON
 - **적용 범위**: ApplyAutoClosetPass, ApplyToggleCreatorPass, ApplyStandaloneTogglePass에서 생성하는 모든 AnimatorState
 - **Toggle/Standalone Pass**는 `AutoClosetUtil.ResolveWriteDefaults()`로 부모 계층의 AutoCloset에서 WD 값을 탐색
-- **캐시 워밍**: `WarmAvatarWriteDefaultsCache()`를 ApplyAutoClosetPass 시작 시 무조건 호출해 옷장 상태 추가 전의 순수 FX로 측정 (늦은 Auto 측정이 자체 생성 상태에 오염되는 것 방지)
 - **WD ON일 때도** 애니메이션 클립의 "모든 프로퍼티 명시" 로직은 그대로 유지 (해가 없음)
 - **EnsureLayerWeightsPass**는 WD 설정과 무관
-
-## 의상 기믹 / 다이내믹스 보존 (v1.0.9)
-
-- **보존 대상 PhysBone 기준 (단일화)**: `AutoClosetUtil.CollectPreservablePhysBones()` — enabled이고 의상 루트까지 체인이 모두 activeSelf인 PhysBone. 유저가 꺼둔 서브트리는 바닐라 동작 유지
-- 보존 대상이 있는 의상은 모든 옷장 상태에서 `m_IsActive=1` 유지 + 렌더러 `m_Enabled`만 토글 (PhysBone 연속 시뮬레이션). 유저의 MA ObjectToggle 기믹은 절대 수정하지 않음 (m_IsActive vs m_Enabled로 충돌 없음)
-- **`resetChildMenuParameters`** (bool, 기본 true): 의상 내부 MA 메뉴/기믹 파라미터를 옷 전환 시 기본값으로 리셋
-  - 파라미터 없는 기믹 메뉴 아이템에 `AutoClosetMenu_{이름}_{해시}` 묵시 파라미터 자동 부여 (Float, `menuItem.isSynced` 존중)
-  - **saved 파라미터는 리셋 제외** (라디얼 퍼펫 색조 등 유저 커스터마이즈 보호) — 단 자체 생성 묵시 파라미터는 리셋 대상
-  - 기본값 우선순위: Expression Parameters/MA > 애니메이터 파라미터 (애니메이터 값은 미등록 파라미터에만 보충)
-- **옵티마이저 호환**: AAO TraceAndOptimize `debugOptions.exclusions` / d4rk `ExcludeTransforms`에 보존 PhysBone 등록 (직렬화 구조 변경 시 경고 로그)
 
 ## 검증 방법
 
 비파괴 도구이므로 런타임 검증이 불가. **Modular Avatar Manual Bake**를 활용:
 
 ```csharp
-// 1. AutoCloset.writeDefaultsMode 값 설정
-closet.writeDefaultsMode = AutoCloset.WriteDefaultsMode.On; // Auto / On / Off
+// 1. AutoCloset.writeDefaults 값 설정
+closet.writeDefaults = true; // 또는 false
 
 // 2. NDMF Manual Bake 실행 (복제본 생성)
 var baked = nadena.dev.ndmf.AvatarProcessor.ProcessAvatarUI(avatar.gameObject);
@@ -135,15 +122,6 @@ CoPlay MCP `execute_script`로 아래 흐름 자동화:
 - **WD OFF 테스트**: Manual Bake → 5 State 전수검사 → **PASS** (모두 writeDefaultValues=false)
 - Inspector UI: Write Defaults 체크박스 정상 표시 (en/ko/ja 로컬라이즈 확인)
 - ResolveWriteDefaults: 부모 탐색으로 Toggle/Standalone Pass에서 WD 설정 정상 전달
-
-### v1.0.9-beta.1 검증 결과 (2026-06-10)
-합성 아바타 베이크 테스트 36건 + 실제 아바타(Plum/Chocolat/MAYO) 베이크 24건 = **60/60 PASS**.
-테스트 스크립트: `Temp/ClaudeClosetBakeTest.cs`, `Temp/ClaudeClosetBakeTest2.cs`, `Temp/ClaudeRealAvatarBakeTest.cs` (Temp는 휘발성 — 필요 시 보존)
-- WD Auto: 단일 상태 DBT 레이어 투표 제외 확인 (2 OFF + 2 DBT ON → OFF 판정)
-- WD On/Off 강제, 루트 옷장 On + 중첩 Auto 옷장의 투표 오염 없음
-- 기믹 ObjectToggle 보존 (Ribbon 토글 애니메이션 생존), 묵시 파라미터 synced 선언, saved 파라미터 리셋 제외, 비-saved 파라미터 리셋
-- 다이내믹스 의상 m_IsActive 상시 1 + 렌더러 토글, 일반 의상은 0/1 정상, 유저가 꺼둔 Tail 미활성, 외부 rootTransform 참조 안전
-- 원본 씬 비파괴: activeSelf / ObjectToggle 목록 / 메뉴 파라미터 전수 비교 무변경
 
 ## 주요 패턴
 
