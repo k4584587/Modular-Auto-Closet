@@ -2,6 +2,7 @@
 using System.Collections;
 using nadena.dev.modular_avatar.core;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 public class AutoCloset : AvatarTagComponent
 
@@ -25,11 +26,29 @@ public class AutoCloset : AvatarTagComponent
     /// </summary>
     public ClosetLanguage language = ClosetLanguage.Korean;
 
+    public enum WriteDefaultsMode
+    {
+        /// <summary>Detect the avatar's existing FX Write Defaults and match it.</summary>
+        Auto,
+        /// <summary>Force generated states to Write Defaults ON.</summary>
+        On,
+        /// <summary>Force generated states to Write Defaults OFF.</summary>
+        Off
+    }
+
     /// <summary>
-    /// Write Defaults setting for generated animator states.
-    /// When true, animator states use WD ON; when false, WD OFF (VRChat recommended).
+    /// Write Defaults policy for generated animator states.
+    /// Auto matches the avatar's existing FX (prevents WD mix that breaks clothing gimmicks).
+    /// v1.0.8 serialized this as "writeDefaults" (bool): true(1)→On, false(0)→Auto.
     /// </summary>
-    public bool writeDefaults = false;
+    [FormerlySerializedAs("writeDefaults")]
+    public WriteDefaultsMode writeDefaultsMode = WriteDefaultsMode.Auto;
+
+    /// <summary>
+    /// Reset Modular Avatar menu/reactive parameters inside clothing items when switching closet states.
+    /// This prevents object-toggle based clothing gimmicks from keeping stale values after the clothing root was disabled.
+    /// </summary>
+    public bool resetChildMenuParameters = true;
 
     public IEnumerable Clothes;
 }
