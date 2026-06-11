@@ -12,6 +12,9 @@ on:
       - completed
   release:
     types: [published]
+  push:
+    branches: [master]
+    paths: [manual-site/**]
 
 permissions:
   contents: read
@@ -52,6 +55,24 @@ jobs:
         run: ${{ env.pathToCi }}/build.cmd BuildRepoListing --root ${{ env.pathToCi }} --list-publish-directory $GITHUB_WORKSPACE/${{ env.listPublishDirectory }} --current-package-name ${{ vars.PACKAGE_NAME }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: manual-site/package-lock.json
+
+      - name: Build Manual Site
+        run: |
+          cd manual-site
+          npm ci
+          npm run build
+
+      - name: Merge Manual Site into Listing
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/${{ env.listPublishDirectory }}/docs
+          cp -r manual-site/dist/. $GITHUB_WORKSPACE/${{ env.listPublishDirectory }}/docs/
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

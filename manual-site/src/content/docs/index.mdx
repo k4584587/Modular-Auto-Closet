@@ -1,0 +1,39 @@
+---
+title: Modular Auto Closet
+description: 우클릭 한 번으로 VRChat 아바타의 의상 옷장을 자동으로 만드는 비파괴 도구.
+template: splash
+hero:
+  tagline: 우클릭 한 번으로 옷장 완성 — VRChat 의상 전환을 자동으로.
+  actions:
+    - text: 5분 만에 시작하기
+      link: /Modular-Auto-Closet/docs/getting-started/quickstart/
+      icon: right-arrow
+    - text: 다운로드 (VCC)
+      link: https://k4584587.github.io/Modular-Auto-Closet/
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+[GIF: 인게임 Expressions 메뉴에서 썸네일 아이콘을 눌러 의상이 바뀌는 5초 데모]
+
+<CardGrid stagger>
+	<Card title="자동 옷장 생성" icon="rocket">
+		아바타에 입힌 의상들을 우클릭 한 번으로 VRChat 메뉴에 등록합니다.
+		애니메이터·파라미터·메뉴를 직접 만질 필요가 없습니다.
+
+		[GIF: 하이어라키 우클릭 → Hirami &gt; Auto Apply Closet → 컴포넌트/썸네일이 자동 생성되는 10초 화면]
+	</Card>
+	<Card title="썸네일 자동 생성" icon="seti:image">
+		의상마다 투명 배경 썸네일을 자동 촬영해 메뉴 아이콘으로 등록합니다.
+
+		[사진(재사용): 퀵스타트의 썸네일 폴더 컷]
+	</Card>
+	<Card title="기믹·물리 보존 (v1.0.9)" icon="approve-check">
+		옷을 갈아입어도 의상 기믹 파라미터가 초기화되고,
+		치마·머리카락의 PhysBone 물리는 끊기지 않고 이어집니다.
+
+		[GIF: 치마 PhysBone이 옷 전환 후에도 끊기지 않고 이어지는 비교 데모]
+	</Card>
+</CardGrid>
