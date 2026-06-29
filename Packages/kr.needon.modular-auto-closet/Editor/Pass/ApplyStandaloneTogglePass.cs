@@ -71,7 +71,7 @@ namespace needon.Editor.Pass
                 if (layerIndex < 0) layerIndex = fxController.layers.Length - 1;
 
                 // 5) 상태/전이 구성
-                var writeDefaults = AutoClosetUtil.ResolveWriteDefaults(toggle.gameObject);
+                var writeDefaults = AutoClosetUtil.ResolveWriteDefaults(context, toggle.gameObject);
                 AddStates(sm, paramName, onClip, offClip, layerIndex, writeDefaults);
 
                 // 6) 초기 상태 - 파라미터 기본값/아이템 기본값에 맞춤

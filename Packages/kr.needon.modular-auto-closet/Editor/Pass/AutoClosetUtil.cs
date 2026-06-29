@@ -7,6 +7,8 @@ using UnityEngine;
 using VRC.SDK3.Avatars.Components;
 using System.Collections.Generic;
 using VRC.SDKBase;
+using nadena.dev.ndmf;
+using VRC.SDK3.Dynamics.PhysBone.Components;
 using VRC_AnimatorLayerControl = VRC.SDKBase.VRC_AnimatorLayerControl;
 
 namespace needon.Editor.Pass
@@ -44,7 +46,7 @@ namespace needon.Editor.Pass
             throw new Exception(message);
         }
 
-        private static string GetRelativePath(Transform target, Transform root)
+        internal static string GetRelativePath(Transform target, Transform root)
         {
             if (target == root) return "";
 
@@ -95,7 +97,7 @@ namespace needon.Editor.Pass
             });
         }
 
-        public static AnimationClip CreateClosetAnimationClip(GameObject closet, string parentName, string activeClothesName)
+        public static AnimationClip CreateClosetAnimationClip(GameObject closet, string parentName, string activeClothesName, HashSet<Transform> dynamicsChildren = null)
         {
             var safeParentName = SanitizeFileName(parentName);
             var safeClothesName = SanitizeFileName(activeClothesName);
@@ -130,14 +132,18 @@ namespace needon.Editor.Pass
             // key: path|propertyName, value: (binding, curve)
             var blendshapeCurves = new Dictionary<string, (EditorCurveBinding binding, AnimationCurve curve)>();
             var toggleCurves = new Dictionary<string, (EditorCurveBinding binding, AnimationCurve curve)>();
+            var rendererCurves = new Dictionary<string, (EditorCurveBinding binding, AnimationCurve curve)>();
 
             // 모든 옷장 자식(옷)의 활성화 상태를 애니메이션으로 기록
             foreach (Transform child in closet.transform)
             {
                 var isActive = (child.name == activeClothesName);
+                var keepActiveForDynamics = dynamicsChildren != null
+                    ? dynamicsChildren.Contains(child)
+                    : HasPreservablePhysBones(child);
 
                 // 두 키프레임으로 클립 길이를 확보 (VRChat 안정성)
-                var val = isActive ? 1f : 0f;
+                var val = isActive || keepActiveForDynamics ? 1f : 0f;
                 var curve = new AnimationCurve(
                     new Keyframe(0f, val),
                     new Keyframe(1f / 60f, val)
@@ -154,6 +160,11 @@ namespace needon.Editor.Pass
                 );
 
                 AnimationUtility.SetEditorCurve(clip, binding, curve);
+
+                if (keepActiveForDynamics)
+                {
+                    AccumulateRendererCurves(child, avatarRoot, rendererCurves, isActive);
+                }
 
                 // ClosetConfig (unified) takes precedence when present
                 var closetConfig = child.GetComponent<ClosetConfig>();
@@ -274,6 +285,12 @@ namespace needon.Editor.Pass
 
             // 누적된 토글 곡선을 한 번만 기록 (중복 덮어쓰기 방지)
             foreach (var kv in toggleCurves.Values)
+            {
+                AnimationUtility.SetEditorCurve(clip, kv.binding, kv.curve);
+            }
+
+            // PhysBone 보존을 위해 루트를 계속 켜둔 의상은 렌더러만 끄고 켭니다.
+            foreach (var kv in rendererCurves.Values)
             {
                 AnimationUtility.SetEditorCurve(clip, kv.binding, kv.curve);
             }
@@ -451,13 +468,207 @@ namespace needon.Editor.Pass
         }
 
         /// <summary>
-        /// 부모 계층에서 AutoCloset 컴포넌트를 찾아 writeDefaults 값을 반환합니다.
-        /// 찾지 못하면 false(WD OFF)를 반환합니다.
+        /// 빌드 1회당 측정한 아바타의 순수 FX Write Defaults 값을 캐싱합니다.
+        /// (옷장이 추가한 레이어가 측정을 오염시켜 다수결이 뒤집히는 것을 방지)
         /// </summary>
-        public static bool ResolveWriteDefaults(GameObject context)
+        internal class AvatarWriteDefaultsCache
         {
-            var closet = context.GetComponentInParent<AutoCloset>(true);
-            return closet != null && closet.writeDefaults;
+            public bool Computed;
+            public bool Value;
+        }
+
+        /// <summary>
+        /// 부모 계층의 AutoCloset 설정에 따라 생성 상태에 적용할 Write Defaults 값을 결정합니다.
+        /// Auto 모드면 아바타의 기존 FX WD를 감지(다수결)하여 맞춥니다.
+        /// </summary>
+        public static bool ResolveWriteDefaults(BuildContext context, GameObject obj)
+        {
+            var closet = obj.GetComponentInParent<AutoCloset>(true);
+            var mode = closet != null ? closet.writeDefaultsMode : AutoCloset.WriteDefaultsMode.Auto;
+
+            switch (mode)
+            {
+                case AutoCloset.WriteDefaultsMode.On:
+                    return true;
+                case AutoCloset.WriteDefaultsMode.Off:
+                    return false;
+                default:
+                    var cache = context.GetState<AvatarWriteDefaultsCache>();
+                    WarmAvatarWriteDefaultsCache(context);
+                    return cache.Value;
+            }
+        }
+
+        /// <summary>
+        /// 옷장 레이어/상태가 FX에 추가되기 전에 호출해 순수 아바타 FX의 WD를 무조건 측정·캐싱합니다.
+        /// (ResolveWriteDefaults는 On/Off 모드에서 캐시를 채우지 않으므로, 늦은 Auto 측정이
+        /// 이미 추가된 옷장 상태들에 의해 오염되는 것을 방지하려면 이 메서드로 선행 측정해야 함)
+        /// </summary>
+        public static void WarmAvatarWriteDefaultsCache(BuildContext context)
+        {
+            var cache = context.GetState<AvatarWriteDefaultsCache>();
+            if (cache.Computed) return;
+
+            cache.Value = DetectAvatarWriteDefaults(context.AvatarDescriptor);
+            cache.Computed = true;
+        }
+
+        /// <summary>
+        /// 아바타의 기존 FX 컨트롤러 상태들의 Write Defaults를 다수결로 판정합니다.
+        /// 동률이거나 측정할 상태가 없으면 ON(현대 아바타 기본)을 반환합니다.
+        /// </summary>
+        public static bool DetectAvatarWriteDefaults(VRCAvatarDescriptor avatarDescriptor)
+        {
+            // GetAvatarFxAnimator는 FX가 없으면 모달 다이얼로그 + 예외를 발생시키므로
+            // (Inspector가 리페인트마다 호출함) 여기서는 조용히 탐색한다.
+            var fx = FindAvatarFxAnimator(avatarDescriptor);
+            if (fx == null) return true;
+
+            var on = 0;
+            var off = 0;
+            foreach (var layer in fx.layers)
+            {
+                if (layer.stateMachine == null) continue;
+
+                // 단일 상태 BlendTree 레이어는 "WD OFF 아바타에서도 의도적으로 ON"인
+                // 표준 관례(Direct Blend Tree)이므로 다수결에서 제외한다.
+                if (IsSingleStateBlendTreeLayer(layer.stateMachine)) continue;
+
+                CountStatesWriteDefaults(layer.stateMachine, ref on, ref off);
+            }
+
+            if (on == 0 && off == 0) return true;
+            return on >= off;
+        }
+
+        private static bool IsSingleStateBlendTreeLayer(AnimatorStateMachine sm)
+        {
+            return sm.stateMachines.Length == 0 &&
+                   sm.states.Length == 1 &&
+                   sm.states[0].state != null &&
+                   sm.states[0].state.motion is BlendTree;
+        }
+
+        /// <summary>
+        /// FX 컨트롤러를 다이얼로그/예외 없이 탐색합니다. 없으면 null.
+        /// </summary>
+        private static AnimatorController FindAvatarFxAnimator(VRCAvatarDescriptor avatarDescriptor)
+        {
+            if (avatarDescriptor == null || avatarDescriptor.baseAnimationLayers == null)
+                return null;
+
+            foreach (var layer in avatarDescriptor.baseAnimationLayers)
+            {
+                if (layer.type == VRCAvatarDescriptor.AnimLayerType.FX && layer.animatorController != null)
+                    return layer.animatorController as AnimatorController;
+            }
+
+            return null;
+        }
+
+        private static void CountStatesWriteDefaults(AnimatorStateMachine sm, ref int on, ref int off)
+        {
+            // 서브 에셋이 삭제된 손상 컨트롤러는 null 상태/서브 머신을 가질 수 있다.
+            foreach (var child in sm.states)
+            {
+                if (child.state == null) continue;
+                if (child.state.writeDefaultValues) on++;
+                else off++;
+            }
+
+            foreach (var childSm in sm.stateMachines)
+            {
+                if (childSm.stateMachine == null) continue;
+                CountStatesWriteDefaults(childSm.stateMachine, ref on, ref off);
+            }
+        }
+
+        /// <summary>
+        /// 의상이 "보존 대상" PhysBone을 갖는지 판정합니다.
+        /// 보존 대상 = enabled이고, 의상 루트까지의 GameObject 체인이 모두 activeSelf인 PhysBone.
+        /// 유저가 의도적으로 꺼둔 서브트리의 PhysBone은 보존하지 않습니다(바닐라 동작 유지).
+        /// </summary>
+        internal static bool HasPreservablePhysBones(Transform closetChild)
+        {
+            if (closetChild == null)
+                return false;
+
+            foreach (var physBone in closetChild.GetComponentsInChildren<VRCPhysBone>(true))
+            {
+                if (IsPreservablePhysBone(physBone, closetChild))
+                    return true;
+            }
+
+            return false;
+        }
+
+        internal static List<VRCPhysBone> CollectPreservablePhysBones(Transform closetChild)
+        {
+            var result = new List<VRCPhysBone>();
+            if (closetChild == null)
+                return result;
+
+            foreach (var physBone in closetChild.GetComponentsInChildren<VRCPhysBone>(true))
+            {
+                if (IsPreservablePhysBone(physBone, closetChild))
+                    result.Add(physBone);
+            }
+
+            return result;
+        }
+
+        private static bool IsPreservablePhysBone(VRCPhysBone physBone, Transform closetChild)
+        {
+            if (physBone == null || !physBone.enabled)
+                return false;
+
+            // 의상 루트(closetChild) 자신의 activeSelf는 옷장이 관리하므로 검사하지 않는다.
+            var current = physBone.transform;
+            while (current != null && current != closetChild)
+            {
+                if (!current.gameObject.activeSelf)
+                    return false;
+
+                current = current.parent;
+            }
+
+            return current == closetChild;
+        }
+
+        private static void AccumulateRendererCurves(
+            Transform child,
+            Transform avatarRoot,
+            Dictionary<string, (EditorCurveBinding binding, AnimationCurve curve)> rendererCurves,
+            bool isActive)
+        {
+            foreach (var renderer in child.GetComponentsInChildren<Renderer>(true))
+            {
+                if (renderer == null)
+                    continue;
+
+                var rendererPath = GetRelativePath(renderer.transform, avatarRoot);
+                var rendererBinding = EditorCurveBinding.FloatCurve(
+                    rendererPath,
+                    renderer.GetType(),
+                    "m_Enabled"
+                );
+
+                var value = isActive && renderer.enabled ? 1f : 0f;
+                AccumulateRendererCurve(rendererCurves, rendererBinding, value, isActive);
+            }
+        }
+
+        private static void AccumulateRendererCurve(
+            Dictionary<string, (EditorCurveBinding binding, AnimationCurve curve)> rendererCurves,
+            EditorCurveBinding binding,
+            float value,
+            bool isActive)
+        {
+            var key = binding.path + "|" + binding.type.FullName + "|m_Enabled";
+            if (!rendererCurves.ContainsKey(key) || isActive)
+            {
+                rendererCurves[key] = (binding, new AnimationCurve(new Keyframe(0f, value), new Keyframe(1f / 60f, value)));
+            }
         }
 
         /// <summary>

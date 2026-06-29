@@ -99,7 +99,7 @@ namespace needon.Editor.Pass
                 if (layerIndex < 0) layerIndex = fxController.layers.Length - 1;
 
                 // 상태와 트랜지션 생성
-                var writeDefaults = AutoClosetUtil.ResolveWriteDefaults(toggle.gameObject);
+                var writeDefaults = AutoClosetUtil.ResolveWriteDefaults(context, toggle.gameObject);
                 AddStates(sm, paramName, onClip, offClip, layerIndex, writeDefaults);
             }
 

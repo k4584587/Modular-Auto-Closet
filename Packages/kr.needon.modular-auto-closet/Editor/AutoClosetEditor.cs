@@ -12,7 +12,13 @@ namespace needon.Editor
         private SerializedProperty _toggleRootName;
         private SerializedProperty _language;
         private SerializedProperty _writeDefaults;
+        private SerializedProperty _resetChildMenuParameters;
         private string _version;
+
+        // FX 전체 상태를 순회하는 WD 감지를 리페인트마다 돌리지 않도록 컨트롤러 기준으로 캐싱
+        private RuntimeAnimatorController _detectedWdController;
+        private bool _detectedWd;
+        private bool _hasDetectedWd;
 
         void OnEnable()
         {
@@ -20,7 +26,8 @@ namespace needon.Editor
             _serialObj = new SerializedObject(_component);
             _toggleRootName = _serialObj.FindProperty("toggleRootName");
             _language = _serialObj.FindProperty("language");
-            _writeDefaults = _serialObj.FindProperty("writeDefaults");
+            _writeDefaults = _serialObj.FindProperty("writeDefaultsMode");
+            _resetChildMenuParameters = _serialObj.FindProperty("resetChildMenuParameters");
 
             // Load version from package.json
             var pkg = AssetDatabase.LoadAssetAtPath<TextAsset>(
@@ -96,12 +103,33 @@ namespace needon.Editor
                 _toggleRootName,
                 new GUIContent(needon.Editor.Util.ClosetLocalization.Get(_component, "AutoCloset.ToggleRootName")));
 
-            // Write Defaults toggle
+            // Write Defaults mode
             EditorGUILayout.PropertyField(
                 _writeDefaults,
                 new GUIContent(
                     needon.Editor.Util.ClosetLocalization.Get(_component, "AutoCloset.WriteDefaults"),
                     needon.Editor.Util.ClosetLocalization.Get(_component, "AutoCloset.WriteDefaults.Tooltip")));
+
+            EditorGUILayout.PropertyField(
+                _resetChildMenuParameters,
+                new GUIContent(
+                    needon.Editor.Util.ClosetLocalization.Get(_component, "AutoCloset.ResetChildMenuParameters"),
+                    needon.Editor.Util.ClosetLocalization.Get(_component, "AutoCloset.ResetChildMenuParameters.Tooltip")));
+
+            // Auto 모드: 아바타에서 감지된 WD 값을 미리 보여줌
+            if (_component.writeDefaultsMode == AutoCloset.WriteDefaultsMode.Auto)
+            {
+                var avatar = _component.GetComponentInParent<VRCAvatarDescriptor>();
+                if (avatar != null)
+                {
+                    var detected = GetDetectedWriteDefaults(avatar);
+                    EditorGUILayout.HelpBox(
+                        string.Format(
+                            needon.Editor.Util.ClosetLocalization.Get(_component, "AutoCloset.WriteDefaults.Detected"),
+                            detected ? "ON" : "OFF"),
+                        MessageType.Info);
+                }
+            }
             GUILayout.Space(6);
 
             // Footer link
@@ -119,6 +147,27 @@ namespace needon.Editor
             EditorGUILayout.EndHorizontal();
 
             _serialObj.ApplyModifiedProperties();
+        }
+
+        // FX 컨트롤러 참조가 바뀐 경우에만 전체 상태 다수결을 다시 계산한다.
+        private bool GetDetectedWriteDefaults(VRCAvatarDescriptor avatar)
+        {
+            if (avatar.baseAnimationLayers == null)
+                return true;
+
+            var fxLayer = System.Array.Find(
+                avatar.baseAnimationLayers,
+                item => item.type == VRCAvatarDescriptor.AnimLayerType.FX);
+            var controller = fxLayer.animatorController;
+
+            if (!_hasDetectedWd || controller != _detectedWdController)
+            {
+                _detectedWd = needon.Editor.Pass.AutoClosetUtil.DetectAvatarWriteDefaults(avatar);
+                _detectedWdController = controller;
+                _hasDetectedWd = true;
+            }
+
+            return _detectedWd;
         }
 
         [System.Serializable]
