@@ -585,9 +585,10 @@ namespace needon.Editor.Pass
 
         /// <summary>
         /// 의상이 "보존 대상" PhysBone을 갖는지 판정합니다.
-        /// 보존 대상 = enabled이고, 의상 루트(자신 포함)까지의 GameObject 체인이 모두 activeSelf인 PhysBone.
-        /// 즉 지금 실제로 입고 있는(활성) 의상만 보존 대상이며, 안 입은 의상이나 유저가 의도적으로
-        /// 꺼둔 서브트리의 PhysBone은 보존하지 않습니다(rest 상태 겹침 방지 + 바닐라 동작 유지).
+        /// 보존 대상 = enabled이고, 의상 루트까지의 GameObject 체인이 모두 activeSelf인 PhysBone.
+        /// 유저가 의도적으로 꺼둔 서브트리의 PhysBone은 보존하지 않습니다(바닐라 동작 유지).
+        /// 안 입은 의상(루트 activeSelf=false)도 보존 대상 — rest 상태 겹침은
+        /// ApplyAutoClosetPass가 렌더러를 직렬화 수준에서 꺼서 방지합니다.
         /// </summary>
         internal static bool HasPreservablePhysBones(Transform closetChild)
         {
@@ -623,15 +624,7 @@ namespace needon.Editor.Pass
             if (physBone == null || !physBone.enabled)
                 return false;
 
-            // 지금 입고 있지 않은 의상(루트 activeSelf=false)은 보존 대상에서 제외한다.
-            // 안 입은 옷까지 m_IsActive=1로 상시 켜두면, 애니메이터가 적용되기 전 상태
-            // (업로드 썸네일 캡처 / 재생 직후 T포즈 등 rest 상태)에서 모든 의상이 동시에
-            // 보여 겹친다. 보존은 실제 착용(=활성) 중인 의상의 PhysBone 연속성만 지키면 충분하다.
-            if (!closetChild.gameObject.activeSelf)
-                return false;
-
-            // 의상 루트까지의 GameObject 체인이 모두 activeSelf인지 검사한다.
-            // (유저가 의도적으로 꺼둔 서브트리의 PhysBone은 보존하지 않음 — 바닐라 동작 유지)
+            // 의상 루트(closetChild) 자신의 activeSelf는 옷장이 관리하므로 검사하지 않는다.
             var current = physBone.transform;
             while (current != null && current != closetChild)
             {

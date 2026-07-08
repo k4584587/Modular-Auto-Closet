@@ -39,6 +39,11 @@ namespace needon.Editor.Pass
 
                 // 아바타에 부착된 모든 AutoCloset 컴포넌트를 가져옴 (비활성 포함)
                 var closetComponents = avatar.GetComponentsInChildren<AutoCloset>(true);
+
+                // 원래 비활성(안 입은 상태로 저장된) 보존 의상 — 모든 옷장의 클립 생성이
+                // 끝난 뒤 렌더러를 직렬화 수준에서 꺼서 rest 상태 겹침을 방지한다
+                var originallyInactiveDynamics = new HashSet<Transform>();
+
                 foreach (var closetComponent in closetComponents)
                 {
                     var closetGameObject = closetComponent.gameObject;
@@ -60,6 +65,12 @@ namespace needon.Editor.Pass
                     // 보존 대상 PhysBone(= enabled이고 의상 루트까지 체인이 켜져 있는 것)을
                     // 가진 의상 목록을 1회 계산해 활성화/옵티마이저 제외/클립 생성이 공유
                     var dynamicsChildren = CollectDynamicsChildren(closetGameObject);
+                    foreach (var child in dynamicsChildren)
+                    {
+                        if (!child.gameObject.activeSelf)
+                            originallyInactiveDynamics.Add(child);
+                    }
+
                     ActivateDynamicHierarchies(closetGameObject, dynamicsChildren);
                     ExcludeDynamicPhysBonesFromTraceAndOptimize(context.AvatarRootObject, dynamicsChildren);
 
@@ -74,6 +85,8 @@ namespace needon.Editor.Pass
                     var writeDefaults = AutoClosetUtil.ResolveWriteDefaults(context, closetGameObject);
                     CreateClosetStates(closetGameObject, stateMachine, uniqueName, context, layerIndex, writeDefaults, avatarParameterDefaults, dynamicsChildren);
                 }
+
+                DisableInactiveDynamicsRenderers(originallyInactiveDynamics);
             }
             catch (Exception e)
             {
@@ -768,6 +781,32 @@ namespace needon.Editor.Pass
                 }
 
                 current = current.parent;
+            }
+        }
+
+        /// <summary>
+        /// 원래 비활성이던(안 입은 상태로 저장된) 보존 의상의 렌더러를 직렬화 수준에서 끕니다.
+        /// GameObject는 활성(m_IsActive=1)으로 유지되어 PhysBone은 계속 시뮬레이션되지만,
+        /// 애니메이터가 돌기 전 rest 상태(업로드 썸네일 캡처, 재생 직후 T포즈)에서는 보이지 않습니다.
+        /// 클립이 모든 옷장 상태에서 렌더러 m_Enabled를 명시적으로 구동하므로 런타임 표시는 애니메이터가 복원합니다.
+        /// 주의: 클립 생성(AccumulateRendererCurves)이 에디터 시점의 renderer.enabled를 "입었을 때 값"으로
+        /// 읽으므로, 반드시 모든 옷장의 CreateClosetStates가 끝난 뒤에 호출해야 합니다(중첩 옷장 포함).
+        /// </summary>
+        private void DisableInactiveDynamicsRenderers(HashSet<Transform> originallyInactiveDynamics)
+        {
+            foreach (var child in originallyInactiveDynamics)
+            {
+                if (child == null)
+                    continue;
+
+                foreach (var renderer in child.GetComponentsInChildren<Renderer>(true))
+                {
+                    if (renderer == null || !renderer.enabled)
+                        continue;
+
+                    renderer.enabled = false;
+                    EditorUtility.SetDirty(renderer);
+                }
             }
         }
 
