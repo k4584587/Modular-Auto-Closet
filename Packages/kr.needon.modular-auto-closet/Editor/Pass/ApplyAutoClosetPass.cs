@@ -432,8 +432,8 @@ namespace needon.Editor.Pass
                     parametersToAdd.Add(new AnimatorControllerParameter
                     {
                         name = info.ParameterName,
-                        type = AnimatorControllerParameterType.Float,
-                        defaultFloat = info.DefaultValue
+                        type = AnimatorControllerParameterType.Bool,
+                        defaultBool = !Mathf.Approximately(info.DefaultValue, 0f)
                     });
                     continue;
                 }
@@ -491,6 +491,13 @@ namespace needon.Editor.Pass
                 {
                     name = CreateStableMenuParameterName(closet, menuItem, uniqueName)
                 };
+
+                // 묵시 파라미터를 명시적 Bool 토글로 고정한다. automaticValue를 켜두면
+                // Modular Avatar가 파라미터를 Float(8bit)로 확장하므로, 명시 값(1)으로
+                // 전환해 Bool(1bit)로 생성되게 한다 (동기화 예산 토글당 8→1bit 절감).
+                menuItem.automaticValue = false;
+                control.value = 1f;
+
                 EnsureMenuParameterConfig(menuItem, control);
                 EditorUtility.SetDirty(menuItem);
             }
@@ -520,10 +527,10 @@ namespace needon.Editor.Pass
             parameters.parameters.Add(new ParameterConfig
             {
                 nameOrPrefix = parameterName,
-                // AutoCloset reset drivers reference these parameters before Modular Avatar
-                // finalizes menu parameters, so MA expands them to Float in the FX controller.
-                // Declaring them as Float keeps Expression Parameters, drivers, and conditions aligned.
-                syncType = ParameterSyncType.Float,
+                // NormalizeImplicitMenuParameters에서 automaticValue=false + value=1로 고정하므로
+                // Modular Avatar가 이 파라미터를 Bool(1bit)로 생성한다. Expression Parameters /
+                // 드라이버 / 애니메이터 파라미터를 모두 Bool로 맞춰 동기화 예산을 토글당 8→1bit로 줄인다.
+                syncType = ParameterSyncType.Bool,
                 // MA가 빈 파라미터를 자동 할당할 때와 동일하게 메뉴 아이템의 동기화 설정을 따른다.
                 // (localOnly 강제 시 원격 플레이어에게 기믹 상태가 보이지 않음)
                 localOnly = !menuItem.isSynced,
