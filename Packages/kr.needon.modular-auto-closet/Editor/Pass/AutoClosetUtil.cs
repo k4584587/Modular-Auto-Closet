@@ -587,6 +587,8 @@ namespace needon.Editor.Pass
         /// 의상이 "보존 대상" PhysBone을 갖는지 판정합니다.
         /// 보존 대상 = enabled이고, 의상 루트까지의 GameObject 체인이 모두 activeSelf인 PhysBone.
         /// 유저가 의도적으로 꺼둔 서브트리의 PhysBone은 보존하지 않습니다(바닐라 동작 유지).
+        /// 안 입은 의상(루트 activeSelf=false)도 보존 대상 — rest 상태 겹침은
+        /// ApplyAutoClosetPass가 렌더러를 직렬화 수준에서 꺼서 방지합니다.
         /// </summary>
         internal static bool HasPreservablePhysBones(Transform closetChild)
         {

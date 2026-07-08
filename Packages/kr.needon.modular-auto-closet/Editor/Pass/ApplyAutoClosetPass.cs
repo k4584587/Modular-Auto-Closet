@@ -39,6 +39,11 @@ namespace needon.Editor.Pass
 
                 // 아바타에 부착된 모든 AutoCloset 컴포넌트를 가져옴 (비활성 포함)
                 var closetComponents = avatar.GetComponentsInChildren<AutoCloset>(true);
+
+                // 원래 비활성(안 입은 상태로 저장된) 보존 의상 — 모든 옷장의 클립 생성이
+                // 끝난 뒤 렌더러를 직렬화 수준에서 꺼서 rest 상태 겹침을 방지한다
+                var originallyInactiveDynamics = new HashSet<Transform>();
+
                 foreach (var closetComponent in closetComponents)
                 {
                     var closetGameObject = closetComponent.gameObject;
@@ -60,6 +65,12 @@ namespace needon.Editor.Pass
                     // 보존 대상 PhysBone(= enabled이고 의상 루트까지 체인이 켜져 있는 것)을
                     // 가진 의상 목록을 1회 계산해 활성화/옵티마이저 제외/클립 생성이 공유
                     var dynamicsChildren = CollectDynamicsChildren(closetGameObject);
+                    foreach (var child in dynamicsChildren)
+                    {
+                        if (!child.gameObject.activeSelf)
+                            originallyInactiveDynamics.Add(child);
+                    }
+
                     ActivateDynamicHierarchies(closetGameObject, dynamicsChildren);
                     ExcludeDynamicPhysBonesFromTraceAndOptimize(context.AvatarRootObject, dynamicsChildren);
 
@@ -74,6 +85,8 @@ namespace needon.Editor.Pass
                     var writeDefaults = AutoClosetUtil.ResolveWriteDefaults(context, closetGameObject);
                     CreateClosetStates(closetGameObject, stateMachine, uniqueName, context, layerIndex, writeDefaults, avatarParameterDefaults, dynamicsChildren);
                 }
+
+                DisableInactiveDynamicsRenderers(originallyInactiveDynamics);
             }
             catch (Exception e)
             {
@@ -432,8 +445,8 @@ namespace needon.Editor.Pass
                     parametersToAdd.Add(new AnimatorControllerParameter
                     {
                         name = info.ParameterName,
-                        type = AnimatorControllerParameterType.Float,
-                        defaultFloat = info.DefaultValue
+                        type = AnimatorControllerParameterType.Bool,
+                        defaultBool = !Mathf.Approximately(info.DefaultValue, 0f)
                     });
                     continue;
                 }
@@ -491,6 +504,13 @@ namespace needon.Editor.Pass
                 {
                     name = CreateStableMenuParameterName(closet, menuItem, uniqueName)
                 };
+
+                // 묵시 파라미터를 명시적 Bool 토글로 고정한다. automaticValue를 켜두면
+                // Modular Avatar가 파라미터를 Float(8bit)로 확장하므로, 명시 값(1)으로
+                // 전환해 Bool(1bit)로 생성되게 한다 (동기화 예산 토글당 8→1bit 절감).
+                menuItem.automaticValue = false;
+                control.value = 1f;
+
                 EnsureMenuParameterConfig(menuItem, control);
                 EditorUtility.SetDirty(menuItem);
             }
@@ -520,10 +540,10 @@ namespace needon.Editor.Pass
             parameters.parameters.Add(new ParameterConfig
             {
                 nameOrPrefix = parameterName,
-                // AutoCloset reset drivers reference these parameters before Modular Avatar
-                // finalizes menu parameters, so MA expands them to Float in the FX controller.
-                // Declaring them as Float keeps Expression Parameters, drivers, and conditions aligned.
-                syncType = ParameterSyncType.Float,
+                // NormalizeImplicitMenuParameters에서 automaticValue=false + value=1로 고정하므로
+                // Modular Avatar가 이 파라미터를 Bool(1bit)로 생성한다. Expression Parameters /
+                // 드라이버 / 애니메이터 파라미터를 모두 Bool로 맞춰 동기화 예산을 토글당 8→1bit로 줄인다.
+                syncType = ParameterSyncType.Bool,
                 // MA가 빈 파라미터를 자동 할당할 때와 동일하게 메뉴 아이템의 동기화 설정을 따른다.
                 // (localOnly 강제 시 원격 플레이어에게 기믹 상태가 보이지 않음)
                 localOnly = !menuItem.isSynced,
@@ -761,6 +781,32 @@ namespace needon.Editor.Pass
                 }
 
                 current = current.parent;
+            }
+        }
+
+        /// <summary>
+        /// 원래 비활성이던(안 입은 상태로 저장된) 보존 의상의 렌더러를 직렬화 수준에서 끕니다.
+        /// GameObject는 활성(m_IsActive=1)으로 유지되어 PhysBone은 계속 시뮬레이션되지만,
+        /// 애니메이터가 돌기 전 rest 상태(업로드 썸네일 캡처, 재생 직후 T포즈)에서는 보이지 않습니다.
+        /// 클립이 모든 옷장 상태에서 렌더러 m_Enabled를 명시적으로 구동하므로 런타임 표시는 애니메이터가 복원합니다.
+        /// 주의: 클립 생성(AccumulateRendererCurves)이 에디터 시점의 renderer.enabled를 "입었을 때 값"으로
+        /// 읽으므로, 반드시 모든 옷장의 CreateClosetStates가 끝난 뒤에 호출해야 합니다(중첩 옷장 포함).
+        /// </summary>
+        private void DisableInactiveDynamicsRenderers(HashSet<Transform> originallyInactiveDynamics)
+        {
+            foreach (var child in originallyInactiveDynamics)
+            {
+                if (child == null)
+                    continue;
+
+                foreach (var renderer in child.GetComponentsInChildren<Renderer>(true))
+                {
+                    if (renderer == null || !renderer.enabled)
+                        continue;
+
+                    renderer.enabled = false;
+                    EditorUtility.SetDirty(renderer);
+                }
             }
         }
 
