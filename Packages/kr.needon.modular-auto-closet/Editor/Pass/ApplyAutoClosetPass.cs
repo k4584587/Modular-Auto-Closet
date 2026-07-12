@@ -40,10 +40,11 @@ namespace needon.Editor.Pass
                 // 아바타에 부착된 모든 AutoCloset 컴포넌트를 가져옴 (비활성 포함)
                 var closetComponents = avatar.GetComponentsInChildren<AutoCloset>(true);
 
-                // 원래 비활성(안 입은 상태로 저장된) 보존 의상 — 모든 옷장의 클립 생성이
-                // 끝난 뒤 렌더러를 직렬화 수준에서 꺼서 rest 상태 겹침을 방지한다
-                var originallyInactiveDynamics = new HashSet<Transform>();
-
+                // 프리패스: 모든 옷장의 고유 파라미터 이름(uniqueName)을 확정하고
+                // RecalculateClosetChildren으로 각 의상 MenuItem의 Control.value(형제 순서)를 먼저 확정한다.
+                // 옷장 A의 드라이버가 옷장 B의 의상을 참조할 때, 본 루프의 드라이버 해결이
+                // B의 확정된 값을 읽을 수 있도록 하기 위함 (parameter-driver-v2.md §7.1).
+                var closetUniqueNames = new Dictionary<GameObject, string>();
                 foreach (var closetComponent in closetComponents)
                 {
                     var closetGameObject = closetComponent.gameObject;
@@ -61,6 +62,26 @@ namespace needon.Editor.Pass
                     }
 
                     RecalculateClosetChildren(closetGameObject, uniqueName);
+                    closetUniqueNames[closetGameObject] = uniqueName;
+                }
+
+                // 미등록 파라미터 자동 등록: 프리패스로 참조 값이 확정된 뒤 드라이버를 해결해
+                // autoRegister 대상 파라미터를 MA Parameters/FX 애니메이터에 등록한다 (§7.2).
+                // 존재 판정에 쓰는 avatarParameterDefaults를 등록분으로 갱신해 리셋/중복 등록과 일관되게 한다.
+                AutoRegisterMissingParameters(closetComponents, avatarParameterDefaults);
+
+                // 원래 비활성(안 입은 상태로 저장된) 보존 의상 — 모든 옷장의 클립 생성이
+                // 끝난 뒤 렌더러를 직렬화 수준에서 꺼서 rest 상태 겹침을 방지한다
+                var originallyInactiveDynamics = new HashSet<Transform>();
+
+                foreach (var closetComponent in closetComponents)
+                {
+                    var closetGameObject = closetComponent.gameObject;
+                    // 프리패스에서 검증을 통과해 uniqueName이 확정된 옷장만 처리한다.
+                    if (!closetUniqueNames.TryGetValue(closetGameObject, out var uniqueName))
+                    {
+                        continue;
+                    }
 
                     // 보존 대상 PhysBone(= enabled이고 의상 루트까지 체인이 켜져 있는 것)을
                     // 가진 의상 목록을 1회 계산해 활성화/옵티마이저 제외/클립 생성이 공유
@@ -277,7 +298,10 @@ namespace needon.Editor.Pass
                 if (config == null || config.drivers == null || config.drivers.Length == 0)
                     continue;
 
-                foreach (var driver in config.drivers)
+                // MenuTarget 참조를 실제 (이름, 값)으로 해결한 뒤 수집한다.
+                // 그래야 스마트 리셋이 참조 드라이버의 파라미터를 인식해 덮어쓰지 않는다.
+                var resolvedDrivers = AutoClosetUtil.ResolveDriverItems(config.drivers, config);
+                foreach (var driver in resolvedDrivers)
                 {
                     CollectConfiguredParameterDriver(child, driver, result);
                 }
@@ -416,6 +440,176 @@ namespace needon.Editor.Pass
                         break;
                 }
             }
+        }
+
+        /// <summary>
+        /// autoRegister가 켜진 파라미터 드라이버 중 아바타에 아직 존재하지 않는 파라미터를
+        /// 빌드 시 ModularAvatarParameters(+FX 애니메이터)에 등록합니다. (parameter-driver-v2.md §7.2)
+        /// 존재 판정은 이미 수집한 avatarParameterDefaults를 재사용하고, 등록한 이름은
+        /// 딕셔너리에 추가해 같은 이름의 중복 등록과 스마트 리셋 기본값(0)을 함께 처리합니다.
+        /// </summary>
+        private void AutoRegisterMissingParameters(AutoCloset[] closetComponents, Dictionary<string, float> avatarParameterDefaults)
+        {
+            // 등록 후보를 이름별로 모은다. 같은 이름을 여러 항목이 구동하면 값들을 합쳐 타입을 판정하고 1회만 등록한다.
+            var candidates = new Dictionary<string, AutoRegisterCandidate>();
+
+            foreach (var closetComponent in closetComponents)
+            {
+                var closetGameObject = closetComponent.gameObject;
+                if (closetGameObject == null)
+                    continue;
+
+                foreach (Transform child in closetGameObject.transform)
+                {
+                    var config = child.GetComponent<ClosetConfig>();
+                    if (config == null || config.drivers == null || config.drivers.Length == 0)
+                        continue;
+
+                    // MenuTarget 참조는 항상 기존 파라미터를 가리키므로, 해결 결과에서 autoRegister를
+                    // 보존하는 Parameter 모드 항목만 자동 등록 대상이 된다 (MenuTarget 해결본은 autoRegister=false).
+                    var resolvedDrivers = AutoClosetUtil.ResolveDriverItems(config.drivers, config);
+                    foreach (var driver in resolvedDrivers)
+                    {
+                        if (driver == null || !driver.autoRegister)
+                            continue;
+
+                        var parameterName = GetDrivenParameterName(driver);
+                        if (string.IsNullOrEmpty(parameterName))
+                            continue;
+
+                        // 이미 아바타에 존재하는 파라미터(직전 루프에서 등록한 것 포함)는 건너뛴다.
+                        if (avatarParameterDefaults.ContainsKey(parameterName))
+                            continue;
+
+                        if (!candidates.TryGetValue(parameterName, out var candidate))
+                        {
+                            candidate = new AutoRegisterCandidate { OwnerConfig = config };
+                            candidates[parameterName] = candidate;
+                        }
+
+                        candidate.Drivers.Add(driver);
+                        // synced는 하나라도 명시적으로 켜져 있으면 켠다 (기본은 local — 동기화 예산 보호).
+                        if (driver.autoRegisterSynced)
+                            candidate.Synced = true;
+                    }
+                }
+            }
+
+            foreach (var pair in candidates)
+            {
+                var parameterName = pair.Key;
+                var candidate = pair.Value;
+                var syncType = DetermineAutoRegisterSyncType(candidate.Drivers);
+
+                RegisterMaParameter(candidate.OwnerConfig.gameObject, parameterName, syncType, candidate.Synced);
+
+                // VRCAvatarParameterDriver는 애니메이터에 없는 파라미터를 구동할 수 없다.
+                // 묵시 메뉴 파라미터 선례(ApplyImplicitMenuParameterDefaultsToAnimator가 구동 파라미터를
+                // FX에 직접 추가)와 동일하게, 이 패스가 구동하는 파라미터를 FX 애니메이터에도 추가한다.
+                AutoClosetUtil.AddAnimatorParameter(_autoClosetController, parameterName, ToAnimatorParameterType(syncType));
+                EditorUtility.SetDirty(_autoClosetController);
+
+                // 존재 등록 + 스마트 리셋 기본값(0)으로 갱신 (같은 이름 중복 등록 방지).
+                avatarParameterDefaults[parameterName] = 0f;
+
+                needon.Editor.Util.ClosetLogger.Log(candidate.OwnerConfig, "Log.ParameterDriver.AutoRegistered", parameterName, syncType.ToString(), candidate.Synced);
+            }
+        }
+
+        private class AutoRegisterCandidate
+        {
+            public ClosetConfig OwnerConfig;
+            public bool Synced;
+            public readonly List<ClosetParameterDriverItem> Drivers = new List<ClosetParameterDriverItem>();
+        }
+
+        /// <summary>
+        /// 드라이버가 실제로 기록(구동)하는 파라미터 이름을 반환합니다.
+        /// Copy는 대상(destName, 없으면 source)을, 그 외에는 name을 사용합니다.
+        /// </summary>
+        private static string GetDrivenParameterName(ClosetParameterDriverItem driver)
+        {
+            if (driver.type == ClosetParameterDriverItem.ChangeType.Copy)
+                return string.IsNullOrEmpty(driver.destName) ? driver.source : driver.destName;
+
+            return driver.name;
+        }
+
+        /// <summary>
+        /// 같은 이름을 구동하는 드라이버들의 값으로 등록 파라미터의 syncType을 판정합니다.
+        /// 모든 값이 {0,1}이면 Bool, 전부 정수면 Int, 그 외는 Float.
+        /// Random은 valueMin/valueMax를 후보 값으로 쓰고, Add/Copy는 연속/불확정이므로 Float으로 확정합니다.
+        /// </summary>
+        private static ParameterSyncType DetermineAutoRegisterSyncType(List<ClosetParameterDriverItem> drivers)
+        {
+            var values = new List<float>();
+
+            foreach (var driver in drivers)
+            {
+                switch (driver.type)
+                {
+                    case ClosetParameterDriverItem.ChangeType.Set:
+                        values.Add(driver.value);
+                        break;
+                    case ClosetParameterDriverItem.ChangeType.Random:
+                        values.Add(driver.valueMin);
+                        values.Add(driver.valueMax);
+                        break;
+                    case ClosetParameterDriverItem.ChangeType.Add:
+                    case ClosetParameterDriverItem.ChangeType.Copy:
+                        return ParameterSyncType.Float;
+                }
+            }
+
+            if (values.Count == 0)
+                return ParameterSyncType.Float;
+
+            if (values.All(v => Mathf.Approximately(v, 0f) || Mathf.Approximately(v, 1f)))
+                return ParameterSyncType.Bool;
+
+            if (values.All(v => Mathf.Approximately(v, Mathf.Round(v))))
+                return ParameterSyncType.Int;
+
+            return ParameterSyncType.Float;
+        }
+
+        private static AnimatorControllerParameterType ToAnimatorParameterType(ParameterSyncType syncType)
+        {
+            switch (syncType)
+            {
+                case ParameterSyncType.Bool:
+                    return AnimatorControllerParameterType.Bool;
+                case ParameterSyncType.Int:
+                    return AnimatorControllerParameterType.Int;
+                default:
+                    return AnimatorControllerParameterType.Float;
+            }
+        }
+
+        /// <summary>
+        /// 대상 GameObject의 ModularAvatarParameters에 파라미터를 등록합니다. (묵시 메뉴 파라미터 패턴 재사용)
+        /// 이미 같은 이름이 있으면 아무것도 하지 않습니다. 기본값 0, saved=false로 등록합니다.
+        /// </summary>
+        private void RegisterMaParameter(GameObject owner, string parameterName, ParameterSyncType syncType, bool synced)
+        {
+            var parameters = owner.GetComponent<ModularAvatarParameters>();
+            if (parameters == null)
+                parameters = owner.AddComponent<ModularAvatarParameters>();
+
+            if (parameters.parameters.Any(parameter => parameter.nameOrPrefix == parameterName))
+                return;
+
+            parameters.parameters.Add(new ParameterConfig
+            {
+                nameOrPrefix = parameterName,
+                syncType = syncType,
+                // 기본 local — synced는 유저가 autoRegisterSynced로 명시적으로 켠 경우만 (동기화 예산 보호).
+                localOnly = !synced,
+                defaultValue = 0f,
+                saved = false,
+                hasExplicitDefaultValue = false
+            });
+            EditorUtility.SetDirty(parameters);
         }
 
         // 파라미터가 비어 있는 의상 기믹 메뉴 항목에 자동 부여하는 파라미터 이름 접두사.
@@ -1061,10 +1255,11 @@ namespace needon.Editor.Pass
             var driversList = new List<ClosetParameterDriverItem>();
 
             // 1. 이 옷에 명시적으로 설정된 드라이버들 추가
+            //    MenuTarget 참조는 실제 (이름, 값)으로 해결한 뒤 추가한다.
             var config = clothes.GetComponent<ClosetConfig>();
             if (config != null && config.drivers != null && config.drivers.Length > 0)
             {
-                driversList.AddRange(config.drivers);
+                driversList.AddRange(AutoClosetUtil.ResolveDriverItems(config.drivers, config));
             }
 
             // 2. 명시하지 않은 파라미터들을 아바타 기본값으로 리셋
