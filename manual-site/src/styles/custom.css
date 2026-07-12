@@ -1,0 +1,25 @@
+/* 랜딩(splash) 히어로 가운데 정렬 — Starlight 기본은 좌측 7:4 그리드 */
+@media (min-width: 50rem) {
+	.hero.hero {
+		grid-template-columns: 1fr;
+		/* 기본 padding-block은 최대 10rem까지 늘어나 위아래가 횅해짐 */
+		padding-block: 3rem 1.5rem;
+	}
+	.hero .stacked {
+		text-align: center;
+	}
+	.hero .copy {
+		align-items: center;
+	}
+	.hero .actions {
+		justify-content: center;
+	}
+}
+
+/* 랜딩 기능 카드 3열 일자 배치 (기본: 2열) */
+@media (min-width: 50rem) {
+	.landing-cards .card-grid {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		align-items: stretch;
+	}
+}

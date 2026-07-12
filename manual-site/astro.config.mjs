@@ -10,6 +10,7 @@ export default defineConfig({
 	integrations: [
 		starlight({
 			title: 'Modular Auto Closet',
+			customCss: ['./src/styles/custom.css'],
 			defaultLocale: 'root',
 			locales: {
 				// root = 한국어 (URL 접두사 없음). 추후 en/ja 폴더 추가로 확장.

@@ -16,24 +16,29 @@ hero:
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-[GIF: 인게임 Expressions 메뉴에서 썸네일 아이콘을 눌러 의상이 바뀌는 5초 데모]
+<img
+	src="/Modular-Auto-Closet/docs/closet-switch-demo.gif"
+	alt="에디터에서 옷장으로 의상이 전환되는 데모"
+	width="640"
+	style={{ borderRadius: '0.5rem', marginInline: 'auto' }}
+/>
 
-<CardGrid stagger>
-	<Card title="자동 옷장 생성" icon="rocket">
-		아바타에 입힌 의상들을 우클릭 한 번으로 VRChat 메뉴에 등록합니다.
-		애니메이터·파라미터·메뉴를 직접 만질 필요가 없습니다.
+<div class="landing-cards">
+	<CardGrid>
+		<Card title="자동 옷장 생성" icon="rocket">
+			아바타에 입힌 의상들을 우클릭 한 번으로 VRChat 메뉴에 등록합니다.
+			애니메이터·파라미터·메뉴를 직접 만질 필요가 없습니다.
+		</Card>
+		<Card title="썸네일 자동 생성" icon="seti:image">
+			의상마다 투명 배경 썸네일을 자동 촬영해 메뉴 아이콘으로 등록합니다.
 
-		[GIF: 하이어라키 우클릭 → Hirami &gt; Auto Apply Closet → 컴포넌트/썸네일이 자동 생성되는 10초 화면]
-	</Card>
-	<Card title="썸네일 자동 생성" icon="seti:image">
-		의상마다 투명 배경 썸네일을 자동 촬영해 메뉴 아이콘으로 등록합니다.
+			[사진(재사용): 퀵스타트의 썸네일 폴더 컷]
+		</Card>
+		<Card title="기믹·물리 보존 (v1.0.9)" icon="approve-check">
+			옷을 갈아입어도 의상 기믹 파라미터가 초기화되고,
+			치마·머리카락의 PhysBone 물리는 끊기지 않고 이어집니다.
 
-		[사진(재사용): 퀵스타트의 썸네일 폴더 컷]
-	</Card>
-	<Card title="기믹·물리 보존 (v1.0.9)" icon="approve-check">
-		옷을 갈아입어도 의상 기믹 파라미터가 초기화되고,
-		치마·머리카락의 PhysBone 물리는 끊기지 않고 이어집니다.
-
-		[GIF: 치마 PhysBone이 옷 전환 후에도 끊기지 않고 이어지는 비교 데모]
-	</Card>
-</CardGrid>
+			[GIF: 치마 PhysBone이 옷 전환 후에도 끊기지 않고 이어지는 비교 데모]
+		</Card>
+	</CardGrid>
+</div>
