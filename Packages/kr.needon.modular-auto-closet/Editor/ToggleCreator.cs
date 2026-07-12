@@ -42,29 +42,7 @@ namespace needon.Editor
             if (closetRoot == null)
                 throw new Exception("AutoCloset 컴포넌트가 붙어있는 옷장 루트를 찾을 수 없습니다.");
 
-            // Toggle 루트 생성/조회 (AutoCloset 설정 사용)
-            var closetComponent = closetRoot.GetComponent<AutoCloset>();
-            var rootName = closetComponent != null && !string.IsNullOrEmpty(closetComponent.toggleRootName)
-                ? closetComponent.toggleRootName
-                : "Toggle";
-
-            var toggleRootObj = closetRoot.Find(rootName)?.gameObject;
-            if (toggleRootObj == null)
-            {
-                toggleRootObj = new GameObject(rootName);
-                toggleRootObj.transform.SetParent(closetRoot, false);
-            }
-
-            // 메뉴 아이콘 로드
-            var icon = AssetDatabase.LoadAssetAtPath<Texture2D>(
-                "Packages/kr.needon.modular-auto-closet/Resource/toggleON.png");
-
-            // Root 메뉴 항목 셋업
-            var rootItem = toggleRootObj.GetComponent<ModularAvatarMenuItem>() ?? toggleRootObj.AddComponent<ModularAvatarMenuItem>();
-            rootItem.Control    ??= new VRCExpressionsMenu.Control();
-            rootItem.Control.type      = VRCExpressionsMenu.Control.ControlType.SubMenu;
-            rootItem.MenuSource        = SubmenuSource.Children;
-            rootItem.Control.icon      = icon;
+            var toggleRootObj = EnsureToggleRoot(closetRoot, out var icon);
 
             // 선택 개수에 따라 분기
             if (selectedObjects.Length == 1)
@@ -79,8 +57,57 @@ namespace needon.Editor
             needon.Editor.Util.ClosetLogger.Log(toggleRootObj, "Log.Toggle.Created");
         }
 
-        // 개별 오브젝트용 토글 생성
-        private static void CreateSingleToggle(GameObject obj, Transform parent, Texture2D icon)
+        /// <summary>
+        /// 대상 오브젝트 하나를 켜고 끄는 토글 아이템을 생성하고 그 GameObject를 반환합니다.
+        /// 우클릭 "Add Create Toggle"의 단일 선택 흐름과 동일한 구조를 만듭니다.
+        /// searchFrom(참조를 건 컴포넌트 위치 등)에서 가까운 옷장 루트를 탐색하고, 없으면 씬 전체에서 찾습니다.
+        /// AutoCloset을 찾지 못하면 null을 반환합니다.
+        /// </summary>
+        public static GameObject CreateToggleForObject(GameObject obj, Transform searchFrom = null)
+        {
+            if (obj == null) return null;
+
+            var closetRoot = FindClosetRoot(searchFrom != null ? searchFrom : obj.transform)
+                             ?? UnityEngine.Object.FindObjectOfType<AutoCloset>(true)?.transform;
+            if (closetRoot == null) return null;
+
+            var toggleRootObj = EnsureToggleRoot(closetRoot, out var icon);
+            var item = CreateSingleToggle(obj, toggleRootObj.transform, icon);
+            needon.Editor.Util.ClosetLogger.Log(toggleRootObj, "Log.Toggle.Created");
+            return item;
+        }
+
+        // Toggle 루트 생성/조회 + 루트 메뉴(SubMenu) 셋업 (AutoCloset의 toggleRootName 설정 사용)
+        private static GameObject EnsureToggleRoot(Transform closetRoot, out Texture2D icon)
+        {
+            var closetComponent = closetRoot.GetComponent<AutoCloset>();
+            var rootName = closetComponent != null && !string.IsNullOrEmpty(closetComponent.toggleRootName)
+                ? closetComponent.toggleRootName
+                : "Toggle";
+
+            var toggleRootObj = closetRoot.Find(rootName)?.gameObject;
+            if (toggleRootObj == null)
+            {
+                toggleRootObj = new GameObject(rootName);
+                toggleRootObj.transform.SetParent(closetRoot, false);
+            }
+
+            // 메뉴 아이콘 로드
+            icon = AssetDatabase.LoadAssetAtPath<Texture2D>(
+                "Packages/kr.needon.modular-auto-closet/Resource/toggleON.png");
+
+            // Root 메뉴 항목 셋업
+            var rootItem = toggleRootObj.GetComponent<ModularAvatarMenuItem>() ?? toggleRootObj.AddComponent<ModularAvatarMenuItem>();
+            rootItem.Control    ??= new VRCExpressionsMenu.Control();
+            rootItem.Control.type      = VRCExpressionsMenu.Control.ControlType.SubMenu;
+            rootItem.MenuSource        = SubmenuSource.Children;
+            rootItem.Control.icon      = icon;
+
+            return toggleRootObj;
+        }
+
+        // 개별 오브젝트용 토글 생성 (생성/재사용된 토글 아이템 GameObject 반환)
+        private static GameObject CreateSingleToggle(GameObject obj, Transform parent, Texture2D icon)
         {
             var baseName  = $"Toggle_{obj.name}";
             var suffix    = Guid.NewGuid().ToString("N").Substring(0, 8);
@@ -130,6 +157,8 @@ namespace needon.Editor
                     saved         = true
                 });
             }
+
+            return itemGO;
         }
 
         // 다중 선택 시 그룹 토글 생성 (파라미터는 최초 생성 시에만 UUID 부여, 이후 재사용)

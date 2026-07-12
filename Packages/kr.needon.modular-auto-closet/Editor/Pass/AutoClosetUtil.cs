@@ -8,6 +8,7 @@ using VRC.SDK3.Avatars.Components;
 using System.Collections.Generic;
 using VRC.SDKBase;
 using nadena.dev.ndmf;
+using nadena.dev.modular_avatar.core;
 using VRC.SDK3.Dynamics.PhysBone.Components;
 using VRC_AnimatorLayerControl = VRC.SDKBase.VRC_AnimatorLayerControl;
 
@@ -395,6 +396,62 @@ namespace needon.Editor.Pass
         {
             CreateToggleAnimationClip(target, parentName, clipName, true);
             CreateToggleAnimationClip(target, parentName, clipName, false);
+        }
+
+        /// <summary>
+        /// MenuTarget 모드 드라이버를 Parameter 모드(이름·값 확정)로 변환한 새 배열을 반환합니다.
+        /// - Parameter 모드 항목은 원본 참조 그대로 통과합니다 (기존 동작 보존).
+        /// - MenuTarget 모드 항목은 대상 오브젝트의 MA MenuItem에서 (파라미터 이름, 값)을 읽어
+        ///   Set 드라이버로 확정합니다. menuTargetOn=false면 값 0(끄기)으로 설정합니다.
+        /// - 참조가 끊긴(대상/MenuItem/파라미터 이름이 없는) 항목은 건너뛰고 경고 로그를 남깁니다.
+        /// 원본 배열/아이템은 변형하지 않습니다 (씬 데이터 비파괴).
+        /// </summary>
+        public static ClosetParameterDriverItem[] ResolveDriverItems(ClosetParameterDriverItem[] items, Component context)
+        {
+            if (items == null || items.Length == 0)
+                return items;
+
+            var resolved = new List<ClosetParameterDriverItem>(items.Length);
+
+            foreach (var item in items)
+            {
+                // null 항목은 그대로 보존한다. (소비자가 null을 건너뛰므로 기존 동작과 동일하게 유지)
+                if (item == null)
+                {
+                    resolved.Add(null);
+                    continue;
+                }
+
+                // Parameter 모드는 기존 방식 그대로 통과 (원본 참조 유지)
+                if (item.targetMode != ClosetParameterDriverItem.TargetMode.MenuTarget)
+                {
+                    resolved.Add(item);
+                    continue;
+                }
+
+                // MenuTarget 모드: 대상 오브젝트의 MA MenuItem에서 (이름, 값)을 해결한다.
+                var targetObject = item.targetObject;
+                var menuItem = targetObject != null ? targetObject.GetComponent<ModularAvatarMenuItem>() : null;
+                var parameterName = menuItem?.Control?.parameter?.name;
+
+                if (targetObject == null || menuItem == null || string.IsNullOrEmpty(parameterName))
+                {
+                    var targetName = targetObject != null ? targetObject.name : "(none)";
+                    needon.Editor.Util.ClosetLogger.LogWarning(context, "Log.ParameterDriver.MenuTargetMissing", targetName);
+                    continue;
+                }
+
+                // 참조 대상의 MenuItem 값으로 확정한 새 Set 아이템 생성 (원본을 변형하지 않음)
+                resolved.Add(new ClosetParameterDriverItem
+                {
+                    type = ClosetParameterDriverItem.ChangeType.Set,
+                    name = parameterName,
+                    value = item.menuTargetOn ? menuItem.Control.value : 0f,
+                    targetMode = ClosetParameterDriverItem.TargetMode.Parameter
+                });
+            }
+
+            return resolved.ToArray();
         }
 
         /// <summary>
