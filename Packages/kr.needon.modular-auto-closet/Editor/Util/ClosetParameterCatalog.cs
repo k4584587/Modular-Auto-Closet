@@ -154,19 +154,20 @@ namespace needon.Editor.Util
 
             // 3. 애니메이터 파라미터 — 미등록 이름만 보충(Trigger 제외).
             //    FX 레이어 -> 자식 Animator -> MA MergeAnimator 순.
+            //    AnimatorOverrideController는 클립만 교체하고 파라미터는 베이스에 있으므로 베이스로 풀어서 스캔한다.
             if (descriptor != null)
-                AddAnimatorParameters(GetFxController(descriptor), merged, unresolvedValueType);
+                AddAnimatorParameters(GetEffectiveController(GetFxController(descriptor)), merged, unresolvedValueType);
 
             foreach (var animator in avatarRoot.GetComponentsInChildren<Animator>(true))
             {
                 if (animator == null) continue;
-                AddAnimatorParameters(animator.runtimeAnimatorController as AnimatorController, merged, unresolvedValueType);
+                AddAnimatorParameters(GetEffectiveController(animator.runtimeAnimatorController), merged, unresolvedValueType);
             }
 
             foreach (var mergeAnimator in avatarRoot.GetComponentsInChildren<ModularAvatarMergeAnimator>(true))
             {
                 if (mergeAnimator == null) continue;
-                AddAnimatorParameters(mergeAnimator.animator as AnimatorController, merged, unresolvedValueType);
+                AddAnimatorParameters(GetEffectiveController(mergeAnimator.animator), merged, unresolvedValueType);
             }
 
             var ordered = merged.Values
@@ -218,16 +219,28 @@ namespace needon.Editor.Util
             }
         }
 
-        private static AnimatorController GetFxController(VRCAvatarDescriptor descriptor)
+        private static RuntimeAnimatorController GetFxController(VRCAvatarDescriptor descriptor)
         {
             if (descriptor == null || descriptor.baseAnimationLayers == null) return null;
 
             foreach (var layer in descriptor.baseAnimationLayers)
             {
                 if (layer.type == VRCAvatarDescriptor.AnimLayerType.FX && layer.animatorController != null)
-                    return layer.animatorController as AnimatorController;
+                    return layer.animatorController;
             }
             return null;
+        }
+
+        // AnimatorOverrideController 체인을 베이스 AnimatorController까지 풀어낸다.
+        // (오버라이드는 클립만 교체하므로 파라미터는 베이스 컨트롤러에 정의되어 있음)
+        // 빌드 패스(CollectAvatarParameterDefaults)와 스캔 의미론을 맞추기 위해 internal로 공유한다.
+        internal static AnimatorController GetEffectiveController(RuntimeAnimatorController runtimeController)
+        {
+            while (runtimeController is AnimatorOverrideController overrideController)
+            {
+                runtimeController = overrideController.runtimeAnimatorController;
+            }
+            return runtimeController as AnimatorController;
         }
 
         private static float AnimatorDefaultValue(AnimatorControllerParameter parameter)

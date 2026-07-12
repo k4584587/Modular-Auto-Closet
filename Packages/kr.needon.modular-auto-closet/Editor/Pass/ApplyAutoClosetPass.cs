@@ -368,16 +368,18 @@ namespace needon.Editor.Pass
             // 3. From avatar FX and Modular Avatar merge animators
             AddAnimatorParameterDefaults(_autoClosetController, avatarParameters);
 
+            // AnimatorOverrideController는 클립만 교체하고 파라미터는 베이스에 있으므로
+            // 베이스로 풀어서 스캔한다 (에디터 카탈로그와 동일 의미론).
             var animators = avatar.GetComponentsInChildren<Animator>(true);
             foreach (var animator in animators)
             {
-                AddAnimatorParameterDefaults(animator.runtimeAnimatorController as AnimatorController, avatarParameters);
+                AddAnimatorParameterDefaults(needon.Editor.Util.ClosetParameterCatalog.GetEffectiveController(animator.runtimeAnimatorController), avatarParameters);
             }
 
             var mergeAnimators = avatar.GetComponentsInChildren<ModularAvatarMergeAnimator>(true);
             foreach (var mergeAnimator in mergeAnimators)
             {
-                AddAnimatorParameterDefaults(mergeAnimator.animator as AnimatorController, avatarParameters);
+                AddAnimatorParameterDefaults(needon.Editor.Util.ClosetParameterCatalog.GetEffectiveController(mergeAnimator.animator), avatarParameters);
             }
 
             return avatarParameters;
