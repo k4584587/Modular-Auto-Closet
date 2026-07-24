@@ -929,14 +929,25 @@ namespace needon.Editor.Pass
         /// <summary>
         /// 보존 대상 PhysBone(= enabled이고 의상 루트까지 체인이 켜져 있는 것)을 가진
         /// 옷장 자식(의상) 목록을 수집합니다. 활성화/옵티마이저 제외/클립 생성이 이 기준을 공유합니다.
+        /// 단, 의상 밖을 타겟하는 MA 리액티브 컴포넌트(Shape Changer 등)가 있는 의상은 제외합니다 —
+        /// 리액티브 컴포넌트는 호스트 GameObject 활성 상태로 게이트되므로 m_IsActive 상시 1 보존과
+        /// 양립할 수 없습니다 (벗어도 Body 셰이프/외부 토글 반응이 남음).
         /// </summary>
         private HashSet<Transform> CollectDynamicsChildren(GameObject closet)
         {
             var result = new HashSet<Transform>();
             foreach (Transform child in closet.transform)
             {
-                if (AutoClosetUtil.HasPreservablePhysBones(child))
-                    result.Add(child);
+                if (!AutoClosetUtil.HasPreservablePhysBones(child))
+                    continue;
+
+                if (AutoClosetUtil.HasExternalReactiveTargets(child))
+                {
+                    needon.Editor.Util.ClosetLogger.LogWarning(child, "Log.Dynamics.ExternalReactive", child.name);
+                    continue;
+                }
+
+                result.Add(child);
             }
 
             return result;
