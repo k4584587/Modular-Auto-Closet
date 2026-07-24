@@ -1,4 +1,4 @@
-{
+﻿{
   "en": {
     "AutoCloset.Language": "Language",
     "AutoCloset.ToggleRootName": "Toggle Root Name",
@@ -41,6 +41,7 @@
     "Log.Toggle.ClipSaved": "Toggle animation clip saved: {0}",
     "Log.Apply.Error": "Error occurred during AutoCloset processing: {0}",
     "Log.Closet.NoChildren": "The closet does not have any child objects.",
+    "Log.Dynamics.ExternalReactive": "Outfit '{0}' contains MA Reactive Components (Shape Changer etc.) targeting objects outside the outfit, so PhysBone preservation is disabled for it (normal on/off toggling is used so reactions turn off when unequipped).",
     "Error.NoClosetInParent": "There is no Closet object in the parent of the selected object.",
     "Error.NoParameters": "The Closet object does not have ModularAvatarParameters or it has no parameters.",
     "Error.NoValidParameter": "Could not find a valid parameter in the Closet object.",
@@ -141,6 +142,7 @@
     "Log.Toggle.ClipSaved": "토글 애니메이션 클립 저장: {0}",
     "Log.Apply.Error": "AutoCloset 처리 중 오류가 발생했습니다: {0}",
     "Log.Closet.NoChildren": "해당 옷장에는 자식 오브젝트가 없습니다.",
+    "Log.Dynamics.ExternalReactive": "'{0}' 의상에 의상 밖을 대상으로 하는 MA 리액티브 컴포넌트(Shape Changer 등)가 있어 PhysBone 보존을 끄고 일반 토글로 전환합니다. (벗었을 때 Body 셰이프/토글 반응이 남는 것 방지)",
     "Error.NoClosetInParent": "선택한 오브젝트의 부모에 Closet 오브젝트가 없습니다.",
     "Error.NoParameters": "Closet 오브젝트에 ModularAvatarParameters가 없거나 파라미터가 없습니다.",
     "Error.NoValidParameter": "Closet 오브젝트에서 올바른 파라미터를 찾을 수 없습니다.",
@@ -241,6 +243,7 @@
     "Log.Toggle.ClipSaved": "トグルアニメーションクリップを保存: {0}",
     "Log.Apply.Error": "AutoCloset 処理中にエラーが発生しました: {0}",
     "Log.Closet.NoChildren": "このクローゼットには子オブジェクトがありません。",
+    "Log.Dynamics.ExternalReactive": "衣装'{0}'に衣装外を対象とするMAリアクティブコンポーネント（Shape Changerなど）があるため、PhysBone保持を無効にして通常のオン/オフ切替に戻します。（脱いだ後も反応が残るのを防止）",
     "Error.NoClosetInParent": "選択したオブジェクトの親にClosetオブジェクトがありません。",
     "Error.NoParameters": "ClosetオブジェクトにModularAvatarParametersがないか、パラメータがありません。",
     "Error.NoValidParameter": "Closetオブジェクトで有効なパラメータが見つかりませんでした。",

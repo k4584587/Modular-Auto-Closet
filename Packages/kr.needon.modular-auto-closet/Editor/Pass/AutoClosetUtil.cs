@@ -694,6 +694,56 @@ namespace needon.Editor.Pass
             return current == closetChild;
         }
 
+        /// <summary>
+        /// 의상 안에 "의상 밖을 타겟하는" MA 리액티브 컴포넌트(Shape Changer / Object Toggle 등)가
+        /// 있는지 판정합니다. 리액티브 컴포넌트는 호스트 GameObject의 활성 상태로 발동이 결정되므로,
+        /// 이런 의상을 m_IsActive 상시 1(렌더러만 토글)로 보존하면 옷을 벗어도 반응이 남습니다
+        /// (예: Body 축소/삭제 셰이프 잔류, 속옷 숨김 토글 상시 발동). 이 경우 PhysBone 보존을
+        /// 포기하고 바닐라 m_IsActive 토글로 되돌려야 MA의 게이트가 정상 동작합니다.
+        /// 의상 내부만 타겟하는 리액티브 컴포넌트는 렌더러가 꺼져 있으면 보이지 않으므로 보존과 양립합니다.
+        /// </summary>
+        internal static bool HasExternalReactiveTargets(Transform closetChild)
+        {
+            if (closetChild == null)
+                return false;
+
+            foreach (var component in closetChild.GetComponentsInChildren<ReactiveComponent>(true))
+            {
+                foreach (var target in EnumerateReactiveTargets(component))
+                {
+                    if (target != null && !target.transform.IsChildOf(closetChild))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static IEnumerable<GameObject> EnumerateReactiveTargets(ReactiveComponent component)
+        {
+            switch (component)
+            {
+                case ModularAvatarObjectToggle objectToggle:
+                    foreach (var item in objectToggle.Objects)
+                        yield return item.Object?.Get(objectToggle);
+                    break;
+                case ModularAvatarShapeChanger shapeChanger:
+                    foreach (var item in shapeChanger.Shapes)
+                        yield return item.Object?.Get(shapeChanger);
+                    break;
+                case ModularAvatarMaterialSetter materialSetter:
+                    foreach (var item in materialSetter.Objects)
+                        yield return item.Object?.Get(materialSetter);
+                    break;
+                case ModularAvatarMaterialSwap materialSwap:
+                    yield return materialSwap.Root?.Get(materialSwap);
+                    break;
+                case ModularAvatarMeshCutter meshCutter:
+                    yield return meshCutter.Object?.Get(meshCutter);
+                    break;
+            }
+        }
+
         private static void AccumulateRendererCurves(
             Transform child,
             Transform avatarRoot,
