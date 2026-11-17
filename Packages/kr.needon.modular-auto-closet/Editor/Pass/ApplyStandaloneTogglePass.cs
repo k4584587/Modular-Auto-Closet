@@ -24,33 +24,18 @@ namespace needon.Editor.Pass
                 if (items == null || items.Length == 0) continue;
 
                 // 1) StandaloneToggle가 붙은 오브젝트 이름 기준으로 기존 Bool 파라미터 자동 연결
-                var ownerName = toggle.gameObject.name;
-                var linkedParam = FindLinkedBoolParameterName(fxController, ownerName);
+                var paramName = FindLinkedBoolParameterName(fxController, toggle);
 
-                // 2) 실패 시 새 파라미터 생성
-                var paramName = linkedParam ?? ("StandaloneToggle_" + Guid.NewGuid().ToString("N").Substring(0, 8));
-
-                // 파라미터가 없으면 추가
-                if (!fxController.parameters.Any(p => p.name == paramName))
+                // 2) 연결할 파라미터가 없으면 건너뛴다. 메뉴도 Expression Parameter도 없는 파라미터를
+                //    새로 만들면 값이 영원히 false라 대상이 설정의 반대 상태로 고정된다.
+                if (paramName == null)
                 {
-                    AutoClosetUtil.AddAnimatorParameter(fxController, paramName, AnimatorControllerParameterType.Bool);
+                    needon.Editor.Util.ClosetLogger.LogWarning(toggle, "Log.Standalone.NoParameter", toggle.gameObject.name);
+                    continue;
                 }
 
-                // 3) 레이어 생성
-                AnimatorControllerLayer layer;
-                if (linkedParam != null)
-                {
-                    layer = CreateUniqueLayer(fxController, $"{paramName}__StandaloneExt");
-                }
-                else
-                {
-                    AutoClosetUtil.ApplyCreateAnimatorLayer(fxController, paramName);
-                    layer = fxController.layers.Last();
-                }
-
-                if (layer.stateMachine == null)
-                    layer.stateMachine = new AnimatorStateMachine { name = layer.name };
-
+                // 3) 기존 파라미터의 보조 레이어 생성
+                var layer = CreateUniqueLayer(fxController, $"{paramName}__StandaloneExt");
                 var sm = layer.stateMachine;
 
                 // 4) On/Off 클립(타겟 전부 같은 Bool로 제어)
@@ -60,8 +45,8 @@ namespace needon.Editor.Pass
                 foreach (var item in items)
                 {
                     var target = item.target;
-                    var clipOn = AutoClosetUtil.CreateToggleAnimationClip(target, paramName, target.name, item.active);
-                    var clipOff = AutoClosetUtil.CreateToggleAnimationClip(target, paramName, target.name, !item.active);
+                    var clipOn = AutoClosetUtil.CreateToggleAnimationClip(target, avatar.transform, item.active);
+                    var clipOff = AutoClosetUtil.CreateToggleAnimationClip(target, avatar.transform, !item.active);
                     MergeClip(onClip, clipOn);
                     MergeClip(offClip, clipOff);
                 }
@@ -90,33 +75,28 @@ namespace needon.Editor.Pass
             AssetDatabase.SaveAssets();
         }
 
-        // 기존 Bool 파라미터 자동 탐색: Toggle_{Owner}, Toggle_{Owner}_**** 우선, 없으면 포함 검색
-        private static string FindLinkedBoolParameterName(AnimatorController fx, string ownerName)
+        // 기존 Bool 파라미터 자동 탐색. ToggleCreator 규칙(Toggle_{Owner}_****, Toggle_{Owner})이 우선이고,
+        // 없으면 예전처럼 이름이 비슷한 파라미터로 대체하되 엉뚱한 파라미터일 수 있으므로 경고를 남긴다.
+        private static string FindLinkedBoolParameterName(AnimatorController fx, StandaloneToggle toggle)
         {
+            const StringComparison ignoreCase = StringComparison.OrdinalIgnoreCase;
+            var ownerName = toggle.gameObject.name;
+            var exactName = $"Toggle_{ownerName}";
             var boolParams = fx.parameters
                 .Where(p => p.type == AnimatorControllerParameterType.Bool)
                 .Select(p => p.name)
                 .ToArray();
 
-            string[] preferredPrefixes =
-            {
-                $"Toggle_{ownerName}_",
-                $"Toggle_{ownerName}"
-            };
+            var linked = boolParams.FirstOrDefault(n => n.StartsWith(exactName + "_", ignoreCase))
+                         ?? boolParams.FirstOrDefault(n => string.Equals(n, exactName, ignoreCase));
+            if (linked != null) return linked;
 
-            foreach (var pref in preferredPrefixes)
-            {
-                var exact = boolParams.FirstOrDefault(n => string.Equals(n, pref, StringComparison.OrdinalIgnoreCase));
-                if (exact != null) return exact;
+            var fuzzy = boolParams.FirstOrDefault(n => n.StartsWith(exactName, ignoreCase))
+                        ?? boolParams.FirstOrDefault(n => n.IndexOf(ownerName, ignoreCase) >= 0);
+            if (fuzzy != null)
+                needon.Editor.Util.ClosetLogger.LogWarning(toggle, "Log.Standalone.FuzzyLinked", ownerName, fuzzy);
 
-                var starts = boolParams.FirstOrDefault(n => n.StartsWith(pref, StringComparison.OrdinalIgnoreCase));
-                if (starts != null) return starts;
-            }
-
-            var contains = boolParams.FirstOrDefault(n => n.IndexOf(ownerName, StringComparison.OrdinalIgnoreCase) >= 0);
-            if (!string.IsNullOrEmpty(contains)) return contains;
-
-            return null;
+            return fuzzy;
         }
 
         // 기존 레이어와 이름 충돌 없이 보조 레이어 생성

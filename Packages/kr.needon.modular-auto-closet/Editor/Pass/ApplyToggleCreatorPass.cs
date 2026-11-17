@@ -35,11 +35,11 @@ namespace needon.Editor.Pass
 
                 // 파라미터와 레이어 추가
                 AutoClosetUtil.AddAnimatorParameter(fxController, paramName, AnimatorControllerParameterType.Bool);
-                AutoClosetUtil.ApplyCreateAnimatorLayer(fxController, paramName);
 
-                // 새로 추가된 레이어와 상태머신
-                var layer = fxController.layers.Last();
-                var sm = layer.stateMachine;
+                // 새 레이어는 항상 컨트롤러 끝에 추가된다. 같은 이름의 레이어가 이미 있으면
+                // 이름만 유일하게 바뀌므로, 인덱스를 이름으로 찾으면 기존 레이어를 가리키게 된다.
+                var sm = AutoClosetUtil.ApplyCreateAnimatorLayer(fxController, paramName).stateMachine;
+                var layerIndex = fxController.layers.Length - 1;
 
                 AnimationClip onClip;
                 AnimationClip offClip;
@@ -48,8 +48,8 @@ namespace needon.Editor.Pass
                 {
                     // 단일 대상: 기존 로직
                     var target = targets[0];
-                    onClip = AutoClosetUtil.CreateToggleAnimationClip(target, paramName, target.name, true);
-                    offClip = AutoClosetUtil.CreateToggleAnimationClip(target, paramName, target.name, false);
+                    onClip = AutoClosetUtil.CreateToggleAnimationClip(target, avatar.transform, true);
+                    offClip = AutoClosetUtil.CreateToggleAnimationClip(target, avatar.transform, false);
                 }
                 else
                 {
@@ -60,8 +60,8 @@ namespace needon.Editor.Pass
                     foreach (var target in targets)
                     {
                         // 각각의 개별 클립 생성
-                        var clipOn = AutoClosetUtil.CreateToggleAnimationClip(target, paramName, target.name, true);
-                        var clipOff = AutoClosetUtil.CreateToggleAnimationClip(target, paramName, target.name, false);
+                        var clipOn = AutoClosetUtil.CreateToggleAnimationClip(target, avatar.transform, true);
+                        var clipOff = AutoClosetUtil.CreateToggleAnimationClip(target, avatar.transform, false);
 
                         // 머지 유틸로 곡선 합치기
                         MergeClip(onClip, clipOn);
@@ -93,10 +93,6 @@ namespace needon.Editor.Pass
                         AnimationUtility.SetEditorCurve(offClip, binding, curveOff);
                     }
                 }
-
-                // 레이어 인덱스 계산 (이름으로 검색하여 안정성 확보)
-                var layerIndex = Array.FindIndex(fxController.layers, l => l.name == paramName);
-                if (layerIndex < 0) layerIndex = fxController.layers.Length - 1;
 
                 // 상태와 트랜지션 생성
                 var writeDefaults = AutoClosetUtil.ResolveWriteDefaults(context, toggle.gameObject);

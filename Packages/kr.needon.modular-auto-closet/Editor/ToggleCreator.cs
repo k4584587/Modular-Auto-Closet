@@ -1,5 +1,6 @@
 ﻿#if UNITY_EDITOR
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
@@ -20,9 +21,8 @@ namespace needon.Editor
             var selectedObjects = Selection.gameObjects;
             if (selectedObjects.Length == 0) return false;
 
-            // 씬 어딘가에 AutoCloset 이 최소 1개 존재해야 함 (비활성 포함)
-            var anyCloset = UnityEngine.Object.FindObjectsOfType<AutoCloset>(true).Length > 0;
-            if (!anyCloset) return false;
+            // 선택한 오브젝트가 쓸 수 있는 옷장(상위 또는 같은 아바타 안, 비활성 포함)이 있어야 함
+            if (ResolveClosetRoot(selectedObjects[0].transform) == null) return false;
 
             // 선택 자체가 AutoCloset 이면 비활성화 (루트에 직접 생성 방지)
             return selectedObjects.All(go =>
@@ -36,23 +36,15 @@ namespace needon.Editor
             var selectedObjects = Selection.gameObjects;
             if (selectedObjects.Length == 0) return;
 
-            // 옷장 루트 찾기 (상위에서, 없으면 씬 전체)
-            var closetRoot = FindClosetRoot(selectedObjects[0].transform)
-                             ?? UnityEngine.Object.FindObjectOfType<AutoCloset>(true)?.transform;
+            // 옷장 루트 찾기 (상위에서, 없으면 같은 아바타 안에서)
+            var closetRoot = ResolveClosetRoot(selectedObjects[0].transform);
             if (closetRoot == null)
                 throw new Exception("AutoCloset 컴포넌트가 붙어있는 옷장 루트를 찾을 수 없습니다.");
 
             var toggleRootObj = EnsureToggleRoot(closetRoot, out var icon);
 
-            // 선택 개수에 따라 분기
-            if (selectedObjects.Length == 1)
-            {
-                CreateSingleToggle(selectedObjects[0], toggleRootObj.transform, icon);
-            }
-            else
-            {
-                CreateGroupToggle(selectedObjects, toggleRootObj.transform, icon);
-            }
+            // 1개면 개별 토글, 여러 개면 그룹 토글
+            CreateToggleItem(selectedObjects, toggleRootObj.transform, icon);
 
             needon.Editor.Util.ClosetLogger.Log(toggleRootObj, "Log.Toggle.Created");
         }
@@ -60,19 +52,18 @@ namespace needon.Editor
         /// <summary>
         /// 대상 오브젝트 하나를 켜고 끄는 토글 아이템을 생성하고 그 GameObject를 반환합니다.
         /// 우클릭 "Add Create Toggle"의 단일 선택 흐름과 동일한 구조를 만듭니다.
-        /// searchFrom(참조를 건 컴포넌트 위치 등)에서 가까운 옷장 루트를 탐색하고, 없으면 씬 전체에서 찾습니다.
+        /// searchFrom(참조를 건 컴포넌트 위치 등)에서 가까운 옷장 루트를 탐색하고, 없으면 같은 아바타 안에서 찾습니다.
         /// AutoCloset을 찾지 못하면 null을 반환합니다.
         /// </summary>
         public static GameObject CreateToggleForObject(GameObject obj, Transform searchFrom = null)
         {
             if (obj == null) return null;
 
-            var closetRoot = FindClosetRoot(searchFrom != null ? searchFrom : obj.transform)
-                             ?? UnityEngine.Object.FindObjectOfType<AutoCloset>(true)?.transform;
+            var closetRoot = ResolveClosetRoot(searchFrom != null ? searchFrom : obj.transform);
             if (closetRoot == null) return null;
 
             var toggleRootObj = EnsureToggleRoot(closetRoot, out var icon);
-            var item = CreateSingleToggle(obj, toggleRootObj.transform, icon);
+            var item = CreateToggleItem(new[] { obj }, toggleRootObj.transform, icon);
             needon.Editor.Util.ClosetLogger.Log(toggleRootObj, "Log.Toggle.Created");
             return item;
         }
@@ -106,137 +97,68 @@ namespace needon.Editor
             return toggleRootObj;
         }
 
-        // 개별 오브젝트용 토글 생성 (생성/재사용된 토글 아이템 GameObject 반환)
-        private static GameObject CreateSingleToggle(GameObject obj, Transform parent, Texture2D icon)
+        // 대상 오브젝트(들)를 켜고 끄는 토글 아이템을 생성해 반환한다. 1개면 개별 토글, 여러 개면 그룹 토글.
+        // 같은 대상의 토글이 이미 있으면 그것을 그대로 반환한다. 이름이 아니라 대상으로 판정해야
+        // 이름만 같은 다른 오브젝트의 토글을 돌려주거나, 기존 그룹의 대상을 덮어쓰지 않는다.
+        private static GameObject CreateToggleItem(GameObject[] objects, Transform parent, Texture2D icon)
         {
-            var baseName  = $"Toggle_{obj.name}";
-            var suffix    = Guid.NewGuid().ToString("N").Substring(0, 8);
-            var paramName = $"{baseName}_{suffix}";
-
-            var existingGO = parent.Find(baseName);
-            GameObject itemGO;
-            if (existingGO == null)
+            foreach (Transform child in parent)
             {
-                itemGO = new GameObject(baseName);
-                itemGO.transform.SetParent(parent, false);
+                var existing = child.GetComponent<AutoClosetObjectToggle>();
+                if (existing == null || existing.targets == null) continue;
+                if (!new HashSet<GameObject>(existing.targets.Select(t => t?.target)).SetEquals(objects)) continue;
 
-                var toggleComp = itemGO.AddComponent<AutoClosetObjectToggle>();
-                toggleComp.targets = new[]
-                {
-                    new AutoClosetToggleTarget { target = obj, active = true }
-                };
+                // 구버전 토글에 BlendshapeToggle 컴포넌트가 없으면 추가
+                if (child.GetComponent<BlendshapeToggle>() == null)
+                    child.gameObject.AddComponent<BlendshapeToggle>();
 
-                // BlendshapeToggle 컴포넌트 자동 추가
-                itemGO.AddComponent<BlendshapeToggle>();
-
-                var menuItem = itemGO.AddComponent<ModularAvatarMenuItem>();
-                menuItem.Control    ??= new VRCExpressionsMenu.Control();
-                menuItem.Control.type      = VRCExpressionsMenu.Control.ControlType.Toggle;
-                menuItem.Control.parameter = new VRCExpressionsMenu.Control.Parameter { name = paramName };
-                menuItem.Control.icon      = icon;
-            }
-            else
-            {
-                itemGO = existingGO.gameObject;
-                // 기존 토글에 BlendshapeToggle 컴포넌트가 없으면 추가
-                if (itemGO.GetComponent<BlendshapeToggle>() == null)
-                {
-                    itemGO.AddComponent<BlendshapeToggle>();
-                }
+                return child.gameObject;
             }
 
-            var parameters = itemGO.GetComponent<ModularAvatarParameters>()
-                             ?? itemGO.AddComponent<ModularAvatarParameters>();
-            if (parameters.parameters.All(p => p.nameOrPrefix != paramName))
-            {
-                parameters.parameters.Add(new ParameterConfig
-                {
-                    nameOrPrefix  = paramName,
-                    syncType      = ParameterSyncType.Bool,
-                    defaultValue  = 1,
-                    saved         = true
-                });
-            }
+            var baseName  = objects.Length == 1 ? $"Toggle_{objects[0].name}" : "Toggle_Group";
+            var paramName = $"{baseName}_{Guid.NewGuid().ToString("N").Substring(0, 8)}";
 
-            return itemGO;
-        }
+            // 이름이 같은 토글이 이미 있으면 "이름 (1)"처럼 유일한 이름으로 만든다
+            var itemGO = new GameObject(GameObjectUtility.GetUniqueNameForSibling(parent, baseName));
+            itemGO.transform.SetParent(parent, false);
 
-        // 다중 선택 시 그룹 토글 생성 (파라미터는 최초 생성 시에만 UUID 부여, 이후 재사용)
-        private static void CreateGroupToggle(GameObject[] objects, Transform parent, Texture2D icon)
-        {
-            const string groupName = "Toggle_Group";
-            var existingGO = parent.Find(groupName);
+            itemGO.AddComponent<AutoClosetObjectToggle>().targets = objects
+                .Select(o => new AutoClosetToggleTarget { target = o, active = true })
+                .ToArray();
 
-            GameObject groupGO;
-            string paramName;
-            ModularAvatarMenuItem menuItem;
+            // BlendshapeToggle 컴포넌트 자동 추가
+            itemGO.AddComponent<BlendshapeToggle>();
 
-            if (existingGO == null)
-            {
-                // 아직 그룹이 없으면 생성하고 UUID 붙인 파라미터 하나만 설정
-                groupGO = new GameObject(groupName);
-                groupGO.transform.SetParent(parent, false);
+            var menuItem = itemGO.AddComponent<ModularAvatarMenuItem>();
+            menuItem.Control    ??= new VRCExpressionsMenu.Control();
+            menuItem.Control.type      = VRCExpressionsMenu.Control.ControlType.Toggle;
+            menuItem.Control.parameter = new VRCExpressionsMenu.Control.Parameter { name = paramName };
+            menuItem.Control.icon      = icon;
 
-                // targets 설정
-                var toggleComp = groupGO.AddComponent<AutoClosetObjectToggle>();
-                toggleComp.targets = objects
-                    .Select(o => new AutoClosetToggleTarget { target = o, active = true })
-                    .ToArray();
-
-                // BlendshapeToggle 컴포넌트 자동 추가
-                groupGO.AddComponent<BlendshapeToggle>();
-
-                // 메뉴 아이템 & 파라미터 이름(UUID 포함) 설정
-                menuItem = groupGO.AddComponent<ModularAvatarMenuItem>();
-                menuItem.Control    ??= new VRCExpressionsMenu.Control();
-                menuItem.Control.type = VRCExpressionsMenu.Control.ControlType.Toggle;
-                var suffix = Guid.NewGuid().ToString("N").Substring(0, 8);
-                paramName = $"{groupName}_{suffix}";
-                menuItem.Control.parameter = new VRCExpressionsMenu.Control.Parameter { name = paramName };
-                menuItem.Control.icon      = icon;
-            }
-            else
-            {
-                // 이미 생성된 그룹이면 기존 오브젝트와 파라미터 이름 그대로 재사용
-                groupGO = existingGO.gameObject;
-                menuItem = groupGO.GetComponent<ModularAvatarMenuItem>();
-                paramName = menuItem.Control.parameter?.name ?? groupName;
-
-                // 기존 그룹에 BlendshapeToggle 컴포넌트가 없으면 추가
-                if (groupGO.GetComponent<BlendshapeToggle>() == null)
-                {
-                    groupGO.AddComponent<BlendshapeToggle>();
-                }
-
-                // targets 업데이트
-                var toggleComp = groupGO.GetComponent<AutoClosetObjectToggle>();
-                toggleComp.targets = objects
-                    .Select(o => new AutoClosetToggleTarget { target = o, active = true })
-                    .ToArray();
-            }
-
-            // 파라미터 컴포넌트는 오직 하나만 유지
-            var parameters = groupGO.GetComponent<ModularAvatarParameters>() ?? groupGO.AddComponent<ModularAvatarParameters>();
-            parameters.parameters.Clear();
-            parameters.parameters.Add(new ParameterConfig
+            // 파라미터는 아이템을 새로 만들 때만 등록한다 (재실행할 때마다 고아 파라미터가 쌓이지 않게)
+            itemGO.AddComponent<ModularAvatarParameters>().parameters.Add(new ParameterConfig
             {
                 nameOrPrefix = paramName,
                 syncType     = ParameterSyncType.Bool,
                 defaultValue = 1,
                 saved        = true
             });
+
+            return itemGO;
         }
 
-        // 상위 트랜스폼 순회하여 AutoCloset 찾기
-        private static Transform FindClosetRoot(Transform t)
+        // 상위에서 옷장을 찾고, 없으면 같은 아바타 안의 옷장을 쓴다.
+        // (씬 전체에서 찾으면 다른 아바타의 옷장에 토글이 만들어진다)
+        private static Transform ResolveClosetRoot(Transform t)
         {
-            while (t != null)
-            {
-                if (t.GetComponent<AutoCloset>() != null)
-                    return t;
-                t = t.parent;
-            }
-            return null;
+            var closet = t.GetComponentInParent<AutoCloset>(true);
+            if (closet != null) return closet.transform;
+
+            var avatar = t.GetComponentInParent<VRCAvatarDescriptor>(true);
+            if (avatar == null) return null;
+
+            closet = avatar.GetComponentInChildren<AutoCloset>(true);
+            return closet != null ? closet.transform : null;
         }
     }
 }

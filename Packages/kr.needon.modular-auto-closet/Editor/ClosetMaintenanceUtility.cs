@@ -69,8 +69,8 @@ namespace needon.Editor
                 Undo.DestroyObjectImmediate(comp);
             foreach (var comp in closetRoot.GetComponentsInChildren<BlendshapeToggle>(true))
                 Undo.DestroyObjectImmediate(comp);
-            foreach (var comp in closetRoot.GetComponentsInChildren<ModularAvatarShapeChanger>(true))
-                Undo.DestroyObjectImmediate(comp);
+            // MA Shape Changer는 지우지 않는다. 지금 도구는 만들지 않는 컴포넌트라
+            // 의상 제작자·유저가 넣어 둔 것과 구분할 수 없다.
 
             var rootMenu = closetRoot.GetComponent<ModularAvatarMenuItem>();
             if (rootMenu != null) Undo.DestroyObjectImmediate(rootMenu);

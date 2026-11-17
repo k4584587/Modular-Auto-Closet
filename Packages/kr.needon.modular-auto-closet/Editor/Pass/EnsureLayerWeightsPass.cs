@@ -9,8 +9,8 @@ using VRC_AnimatorLayerControl = VRC.SDKBase.VRC_AnimatorLayerControl;
 namespace needon.Editor.Pass
 {
     /// <summary>
-    /// Optimizing 페이즈 최종 단계:
-    /// 1. Weight가 0인 레이어를 1로 복원
+    /// Optimizing 페이즈 최종 단계 (우리가 만든 레이어만 대상):
+    /// 1. Weight가 0이 된 우리 레이어를 1로 복원
     /// 2. 다른 툴의 VRCAnimatorLayerControl이 우리 레이어의 Weight를 0으로 설정하는 것을 무력화
     /// </summary>
     internal class EnsureLayerWeightsPass : Pass<EnsureLayerWeightsPass>
@@ -21,11 +21,25 @@ namespace needon.Editor.Pass
             var fxController = AutoClosetUtil.GetAvatarFxAnimator(avatar) as AnimatorController;
             if (fxController == null) return;
 
-            // Step 1: Weight가 0인 레이어를 1로 복원
+            // Step 1: 우리 레이어 인덱스 식별 (VRCAnimatorLayerControl goalWeight=1을 가진 레이어)
             var layers = fxController.layers;
-            var changed = false;
+            var protectedLayers = new HashSet<int>();
 
             for (var i = 1; i < layers.Length; i++)
+            {
+                if (layers[i].stateMachine != null && HasOurLayerControl(layers[i].stateMachine, i))
+                {
+                    protectedLayers.Add(i);
+                }
+            }
+
+            if (protectedLayers.Count == 0) return;
+
+            // Step 2: Weight가 0인 우리 레이어를 1로 복원
+            // (그 밖의 레이어는 제작자가 일부러 0으로 둔 것일 수 있으므로 건드리지 않는다)
+            var changed = false;
+
+            foreach (var i in protectedLayers)
             {
                 if (Math.Abs(layers[i].defaultWeight) < 0.001f)
                 {
@@ -43,20 +57,6 @@ namespace needon.Editor.Pass
                 fxController.layers = layers;
                 EditorUtility.SetDirty(fxController);
             }
-
-            // Step 2: 우리 레이어 인덱스 식별 (VRCAnimatorLayerControl goalWeight=1을 가진 레이어)
-            layers = fxController.layers; // 갱신된 배열 다시 읽기
-            var protectedLayers = new HashSet<int>();
-
-            for (var i = 1; i < layers.Length; i++)
-            {
-                if (layers[i].stateMachine != null && HasOurLayerControl(layers[i].stateMachine, i))
-                {
-                    protectedLayers.Add(i);
-                }
-            }
-
-            if (protectedLayers.Count == 0) return;
 
             // Step 3: 전체 컨트롤러 스캔 - 우리 레이어를 goalWeight<1로 설정하는 행위 무력화
             for (var i = 0; i < layers.Length; i++)
