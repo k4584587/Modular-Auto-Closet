@@ -40,11 +40,11 @@ namespace needon.Editor.Pass
                 // 아바타에 부착된 모든 AutoCloset 컴포넌트를 가져옴 (비활성 포함)
                 var closetComponents = avatar.GetComponentsInChildren<AutoCloset>(true);
 
-                // 프리패스: 모든 옷장의 고유 파라미터 이름(uniqueName)을 확정하고
-                // RecalculateClosetChildren으로 각 의상 MenuItem의 Control.value(형제 순서)를 먼저 확정한다.
+                // 프리패스: 모든 옷장의 고유 파라미터 이름(uniqueName)과 의상 목록을 확정하고
+                // 각 의상 MenuItem의 Control.value(의상 목록 순서)를 먼저 확정한다.
                 // 옷장 A의 드라이버가 옷장 B의 의상을 참조할 때, 본 루프의 드라이버 해결이
                 // B의 확정된 값을 읽을 수 있도록 하기 위함 (parameter-driver-v2.md §7.1).
-                var closetUniqueNames = new Dictionary<GameObject, string>();
+                var closets = new Dictionary<GameObject, (string uniqueName, List<Transform> outfits)>();
                 foreach (var closetComponent in closetComponents)
                 {
                     var closetGameObject = closetComponent.gameObject;
@@ -61,14 +61,17 @@ namespace needon.Editor.Pass
                         uniqueName = "AutoCloset_" + Guid.NewGuid().ToString("N").Substring(0, 8);
                     }
 
-                    RecalculateClosetChildren(closetGameObject, uniqueName);
-                    closetUniqueNames[closetGameObject] = uniqueName;
+                    // 의상 목록은 여기서 한 번만 확정해 메뉴 값·상태 번호·클립이 공유한다.
+                    // (따로 세면 Toggle 루트 같은 비의상 자식 때문에 번호가 어긋난다)
+                    var outfits = AutoClosetUtil.GetClosetOutfits(closetGameObject, uniqueName);
+                    AssignOutfitMenuValues(outfits, uniqueName);
+                    closets[closetGameObject] = (uniqueName, outfits);
                 }
 
                 // 미등록 파라미터 자동 등록: 프리패스로 참조 값이 확정된 뒤 드라이버를 해결해
                 // autoRegister 대상 파라미터를 MA Parameters/FX 애니메이터에 등록한다 (§7.2).
                 // 존재 판정에 쓰는 avatarParameterDefaults를 등록분으로 갱신해 리셋/중복 등록과 일관되게 한다.
-                AutoRegisterMissingParameters(closetComponents, avatarParameterDefaults);
+                AutoRegisterMissingParameters(closets.Values.SelectMany(closet => closet.outfits), avatarParameterDefaults);
 
                 // 원래 비활성(안 입은 상태로 저장된) 보존 의상 — 모든 옷장의 클립 생성이
                 // 끝난 뒤 렌더러를 직렬화 수준에서 꺼서 rest 상태 겹침을 방지한다
@@ -78,14 +81,16 @@ namespace needon.Editor.Pass
                 {
                     var closetGameObject = closetComponent.gameObject;
                     // 프리패스에서 검증을 통과해 uniqueName이 확정된 옷장만 처리한다.
-                    if (!closetUniqueNames.TryGetValue(closetGameObject, out var uniqueName))
+                    if (!closets.TryGetValue(closetGameObject, out var closetInfo))
                     {
                         continue;
                     }
 
+                    var (uniqueName, outfits) = closetInfo;
+
                     // 보존 대상 PhysBone(= enabled이고 의상 루트까지 체인이 켜져 있는 것)을
                     // 가진 의상 목록을 1회 계산해 활성화/옵티마이저 제외/클립 생성이 공유
-                    var dynamicsChildren = CollectDynamicsChildren(closetGameObject);
+                    var dynamicsChildren = CollectDynamicsChildren(outfits);
                     foreach (var child in dynamicsChildren)
                     {
                         if (!child.gameObject.activeSelf)
@@ -95,16 +100,13 @@ namespace needon.Editor.Pass
                     ActivateDynamicHierarchies(closetGameObject, dynamicsChildren);
                     ExcludeDynamicPhysBonesFromTraceAndOptimize(context.AvatarRootObject, dynamicsChildren);
 
-                    // 옷장의 모든 옷에 대해 애니메이션 경로 리매핑 수행
-                    AnimationPathRemapper.RemapClosetAnimations(closetGameObject, avatar.transform);
-
                     // 각 옷장마다 별도의 애니메이터 레이어와 파라미터 생성
                     CreateLayerAndParameter(uniqueName);
                     var layerIndex = FindAutoClosetLayerIndex(uniqueName);
                     var stateMachine = _autoClosetController.layers[layerIndex].stateMachine;
 
                     var writeDefaults = AutoClosetUtil.ResolveWriteDefaults(context, closetGameObject);
-                    CreateClosetStates(closetGameObject, stateMachine, uniqueName, context, layerIndex, writeDefaults, avatarParameterDefaults, dynamicsChildren);
+                    CreateClosetStates(closetGameObject, outfits, stateMachine, uniqueName, context, layerIndex, writeDefaults, avatarParameterDefaults, dynamicsChildren);
                 }
 
                 DisableInactiveDynamicsRenderers(originallyInactiveDynamics);
@@ -171,62 +173,29 @@ namespace needon.Editor.Pass
 
         }
 
-        private void CreateClosetStates(GameObject closet, AnimatorStateMachine stateMachine, string uniqueName, BuildContext context, int layerIndex, bool writeDefaults, Dictionary<string, float> avatarParameterDefaults, HashSet<Transform> dynamicsChildren)
+        private void CreateClosetStates(GameObject closet, List<Transform> outfits, AnimatorStateMachine stateMachine, string uniqueName, BuildContext context, int layerIndex, bool writeDefaults, Dictionary<string, float> avatarParameterDefaults, HashSet<Transform> dynamicsChildren)
         {
-            var parentName = closet.transform.parent != null ? closet.transform.parent.name : closet.name;
-            var defaultClothes = closet.transform.GetChild(0);
-
             // 옷장의 모든 파라미터 드라이버를 수집하여 스마트 리셋 정보 생성
-            var parameterResetInfo = CollectParameterResetInfo(closet, uniqueName, context, avatarParameterDefaults);
+            var parameterResetInfo = CollectParameterResetInfo(closet, outfits, uniqueName, context, avatarParameterDefaults);
             ApplyImplicitMenuParameterDefaultsToAnimator(parameterResetInfo);
 
-            // 기본 옷 상태 생성
-            CreateDefaultClothesState(closet, parentName, defaultClothes, stateMachine, uniqueName, parameterResetInfo, layerIndex, writeDefaults, dynamicsChildren);
-
-            // 추가 옷 상태 생성
-            CreateAdditionalClothesStates(closet, parentName, defaultClothes, stateMachine, uniqueName, parameterResetInfo, layerIndex, writeDefaults, dynamicsChildren);
-        }
-
-        private void CreateDefaultClothesState(GameObject closet, string parentName, Transform defaultClothes, AnimatorStateMachine stateMachine, string uniqueName, Dictionary<string, ParameterResetInfo> parameterResetInfo, int layerIndex, bool writeDefaults, HashSet<Transform> dynamicsChildren)
-        {
-            var defaultClip = AutoClosetUtil.CreateClosetAnimationClip(closet, parentName, defaultClothes.name, dynamicsChildren);
-            var defaultState = stateMachine.AddState(defaultClothes.name, new Vector3(300, 0, 0));
-            defaultState.motion = defaultClip;
-            defaultState.writeDefaultValues = writeDefaults;
-            stateMachine.defaultState = defaultState;
-
-            var anyToDefaultTransition = stateMachine.AddAnyStateTransition(defaultState);
-            ConfigureTransition(anyToDefaultTransition, 0, uniqueName);
-
-            // 파라미터 드라이버 적용 (스마트 리셋 포함)
-            ApplyParameterDriversToClothes(defaultClothes, defaultState, parameterResetInfo);
-
-            // 레이어 Weight 보호: AFK 등으로 Weight가 0이 되는 것을 방지
-            AutoClosetUtil.ApplyLayerWeightControl(defaultState, layerIndex);
-        }
-
-        private void CreateAdditionalClothesStates(GameObject closet, string parentName, Transform defaultClothes, AnimatorStateMachine stateMachine, string uniqueName, Dictionary<string, ParameterResetInfo> parameterResetInfo, int layerIndex, bool writeDefaults, HashSet<Transform> dynamicsChildren)
-        {
-            var index = 1;
-            foreach (Transform child in closet.transform)
+            // 의상 목록의 순서 = 메뉴 값(AssignOutfitMenuValues) = 전환 조건. 첫 의상이 기본 상태.
+            for (var i = 0; i < outfits.Count; i++)
             {
-                if (child == defaultClothes) continue;
+                var outfit = outfits[i];
+                var state = stateMachine.AddState(outfit.name, new Vector3(300, i * 60, 0));
+                state.motion = AutoClosetUtil.CreateClosetAnimationClip(outfits, outfit, context.AvatarRootTransform, dynamicsChildren);
+                state.writeDefaultValues = writeDefaults;
+                if (i == 0)
+                    stateMachine.defaultState = state;
 
-                var stateClip = AutoClosetUtil.CreateClosetAnimationClip(closet, parentName, child.name, dynamicsChildren);
-                var newState = stateMachine.AddState(child.name, new Vector3(300, index * 60, 0));
-                newState.motion = stateClip;
-                newState.writeDefaultValues = writeDefaults;
-
-                var anyStateTransition = stateMachine.AddAnyStateTransition(newState);
-                ConfigureTransition(anyStateTransition, index, uniqueName);
+                ConfigureTransition(stateMachine.AddAnyStateTransition(state), i, uniqueName);
 
                 // 파라미터 드라이버 적용 (스마트 리셋 포함)
-                ApplyParameterDriversToClothes(child, newState, parameterResetInfo);
+                ApplyParameterDriversToClothes(outfit, state, parameterResetInfo);
 
                 // 레이어 Weight 보호: AFK 등으로 Weight가 0이 되는 것을 방지
-                AutoClosetUtil.ApplyLayerWeightControl(newState, layerIndex);
-
-                index++;
+                AutoClosetUtil.ApplyLayerWeightControl(state, layerIndex);
             }
         }
 
@@ -245,7 +214,7 @@ namespace needon.Editor.Pass
         private class ParameterResetInfo
         {
             public string ParameterName;
-            public Dictionary<string, float> ClothesValues = new Dictionary<string, float>(); // 옷 이름 -> 설정 값
+            public Dictionary<Transform, float> ClothesValues = new Dictionary<Transform, float>(); // 의상 -> 설정 값 (이름이 같은 의상 구분)
             public float DefaultValue = 0f; // 기본값 (명시하지 않은 옷에서 사용)
         }
 
@@ -260,22 +229,22 @@ namespace needon.Editor.Pass
         /// <summary>
         /// 옷장의 모든 파라미터 드라이버를 수집하여 리셋 정보를 생성합니다.
         /// </summary>
-        private Dictionary<string, ParameterResetInfo> CollectParameterResetInfo(GameObject closet, string uniqueName, BuildContext context, Dictionary<string, float> avatarParameters)
+        private Dictionary<string, ParameterResetInfo> CollectParameterResetInfo(GameObject closet, List<Transform> outfits, string uniqueName, BuildContext context, Dictionary<string, float> avatarParameters)
         {
             var result = new Dictionary<string, ParameterResetInfo>();
 
-            CollectConfiguredParameterDrivers(closet, result);
+            CollectConfiguredParameterDrivers(outfits, result);
 
             var autoCloset = closet.GetComponent<AutoCloset>();
             if (autoCloset == null || autoCloset.resetChildMenuParameters)
             {
                 // 아바타 전체 스캔이 들어가는 메뉴 아이템 수집은 옷장당 1회만 수행
-                var relatedMenuItems = GetClosetRelatedMenuItems(closet, uniqueName).ToList();
+                var relatedMenuItems = GetClosetRelatedMenuItems(closet, outfits, uniqueName).ToList();
                 NormalizeImplicitMenuParameters(closet, uniqueName, relatedMenuItems);
 
                 // saved 파라미터(라디얼 퍼펫 색조 등 유저 커스터마이즈)는 옷 전환 리셋에서 제외
                 var savedParameters = CollectSavedParameterNames(context);
-                CollectMenuParameterResets(closet, uniqueName, relatedMenuItems, avatarParameters, savedParameters, result);
+                CollectMenuParameterResets(outfits, uniqueName, relatedMenuItems, avatarParameters, savedParameters, result);
             }
 
             // 각 파라미터의 기본값을 아바타/MA/애니메이터 파라미터 정의에서 가져오기
@@ -290,9 +259,9 @@ namespace needon.Editor.Pass
             return result;
         }
 
-        private void CollectConfiguredParameterDrivers(GameObject closet, Dictionary<string, ParameterResetInfo> result)
+        private void CollectConfiguredParameterDrivers(List<Transform> outfits, Dictionary<string, ParameterResetInfo> result)
         {
-            foreach (Transform child in closet.transform)
+            foreach (var child in outfits)
             {
                 var config = child.GetComponent<ClosetConfig>();
                 if (config == null || config.drivers == null || config.drivers.Length == 0)
@@ -328,7 +297,7 @@ namespace needon.Editor.Pass
                 };
             }
 
-            result[driver.name].ClothesValues[clothes.name] = driver.value;
+            result[driver.name].ClothesValues[clothes] = driver.value;
         }
 
         private Dictionary<string, float> CollectAvatarParameterDefaults(BuildContext context)
@@ -450,50 +419,43 @@ namespace needon.Editor.Pass
         /// 존재 판정은 이미 수집한 avatarParameterDefaults를 재사용하고, 등록한 이름은
         /// 딕셔너리에 추가해 같은 이름의 중복 등록과 스마트 리셋 기본값(0)을 함께 처리합니다.
         /// </summary>
-        private void AutoRegisterMissingParameters(AutoCloset[] closetComponents, Dictionary<string, float> avatarParameterDefaults)
+        private void AutoRegisterMissingParameters(IEnumerable<Transform> outfits, Dictionary<string, float> avatarParameterDefaults)
         {
             // 등록 후보를 이름별로 모은다. 같은 이름을 여러 항목이 구동하면 값들을 합쳐 타입을 판정하고 1회만 등록한다.
             var candidates = new Dictionary<string, AutoRegisterCandidate>();
 
-            foreach (var closetComponent in closetComponents)
+            foreach (var child in outfits)
             {
-                var closetGameObject = closetComponent.gameObject;
-                if (closetGameObject == null)
+                var config = child.GetComponent<ClosetConfig>();
+                if (config == null || config.drivers == null || config.drivers.Length == 0)
                     continue;
 
-                foreach (Transform child in closetGameObject.transform)
+                // MenuTarget 참조는 항상 기존 파라미터를 가리키므로, 해결 결과에서 autoRegister를
+                // 보존하는 Parameter 모드 항목만 자동 등록 대상이 된다 (MenuTarget 해결본은 autoRegister=false).
+                var resolvedDrivers = AutoClosetUtil.ResolveDriverItems(config.drivers, config);
+                foreach (var driver in resolvedDrivers)
                 {
-                    var config = child.GetComponent<ClosetConfig>();
-                    if (config == null || config.drivers == null || config.drivers.Length == 0)
+                    if (driver == null || !driver.autoRegister)
                         continue;
 
-                    // MenuTarget 참조는 항상 기존 파라미터를 가리키므로, 해결 결과에서 autoRegister를
-                    // 보존하는 Parameter 모드 항목만 자동 등록 대상이 된다 (MenuTarget 해결본은 autoRegister=false).
-                    var resolvedDrivers = AutoClosetUtil.ResolveDriverItems(config.drivers, config);
-                    foreach (var driver in resolvedDrivers)
+                    var parameterName = GetDrivenParameterName(driver);
+                    if (string.IsNullOrEmpty(parameterName))
+                        continue;
+
+                    // 이미 아바타에 존재하는 파라미터(직전 루프에서 등록한 것 포함)는 건너뛴다.
+                    if (avatarParameterDefaults.ContainsKey(parameterName))
+                        continue;
+
+                    if (!candidates.TryGetValue(parameterName, out var candidate))
                     {
-                        if (driver == null || !driver.autoRegister)
-                            continue;
-
-                        var parameterName = GetDrivenParameterName(driver);
-                        if (string.IsNullOrEmpty(parameterName))
-                            continue;
-
-                        // 이미 아바타에 존재하는 파라미터(직전 루프에서 등록한 것 포함)는 건너뛴다.
-                        if (avatarParameterDefaults.ContainsKey(parameterName))
-                            continue;
-
-                        if (!candidates.TryGetValue(parameterName, out var candidate))
-                        {
-                            candidate = new AutoRegisterCandidate { OwnerConfig = config };
-                            candidates[parameterName] = candidate;
-                        }
-
-                        candidate.Drivers.Add(driver);
-                        // synced는 하나라도 명시적으로 켜져 있으면 켠다 (기본은 local — 동기화 예산 보호).
-                        if (driver.autoRegisterSynced)
-                            candidate.Synced = true;
+                        candidate = new AutoRegisterCandidate { OwnerConfig = config };
+                        candidates[parameterName] = candidate;
                     }
+
+                    candidate.Drivers.Add(driver);
+                    // synced는 하나라도 명시적으로 켜져 있으면 켠다 (기본은 local — 동기화 예산 보호).
+                    if (driver.autoRegisterSynced)
+                        candidate.Synced = true;
                 }
             }
 
@@ -769,7 +731,7 @@ namespace needon.Editor.Pass
         }
 
         private void CollectMenuParameterResets(
-            GameObject closet,
+            List<Transform> outfits,
             string uniqueName,
             List<ModularAvatarMenuItem> relatedMenuItems,
             Dictionary<string, float> avatarParameters,
@@ -792,7 +754,7 @@ namespace needon.Editor.Pass
                 }
             }
 
-            foreach (Transform child in closet.transform)
+            foreach (var child in outfits)
             {
                 var installers = child.GetComponentsInChildren<ModularAvatarMenuInstaller>(true);
                 foreach (var installer in installers)
@@ -848,11 +810,11 @@ namespace needon.Editor.Pass
             }
         }
 
-        private IEnumerable<ModularAvatarMenuItem> GetClosetRelatedMenuItems(GameObject closet, string uniqueName)
+        private IEnumerable<ModularAvatarMenuItem> GetClosetRelatedMenuItems(GameObject closet, List<Transform> outfits, string uniqueName)
         {
             var avatar = closet.GetComponentInParent<VRCAvatarDescriptor>(true);
             var avatarRoot = avatar != null ? avatar.gameObject : closet.transform.root.gameObject;
-            var closetChildren = GetClosetChildren(closet);
+            var closetChildren = new HashSet<Transform>(outfits);
 
             return avatarRoot.GetComponentsInChildren<ModularAvatarMenuItem>(true)
                 .Where(menuItem => !IsTopLevelClosetSelector(closet, menuItem, uniqueName))
@@ -860,17 +822,6 @@ namespace needon.Editor.Pass
                     IsUnderAnyClosetChild(menuItem.transform, closetChildren) ||
                     MenuItemTargetsClosetChild(menuItem, closetChildren))
                 .Distinct();
-        }
-
-        private HashSet<Transform> GetClosetChildren(GameObject closet)
-        {
-            var children = new HashSet<Transform>();
-            foreach (Transform child in closet.transform)
-            {
-                children.Add(child);
-            }
-
-            return children;
         }
 
         private bool MenuItemTargetsClosetChild(ModularAvatarMenuItem menuItem, HashSet<Transform> closetChildren)
@@ -933,10 +884,10 @@ namespace needon.Editor.Pass
         /// 리액티브 컴포넌트는 호스트 GameObject 활성 상태로 게이트되므로 m_IsActive 상시 1 보존과
         /// 양립할 수 없습니다 (벗어도 Body 셰이프/외부 토글 반응이 남음).
         /// </summary>
-        private HashSet<Transform> CollectDynamicsChildren(GameObject closet)
+        private HashSet<Transform> CollectDynamicsChildren(List<Transform> outfits)
         {
             var result = new HashSet<Transform>();
-            foreach (Transform child in closet.transform)
+            foreach (var child in outfits)
             {
                 if (!AutoClosetUtil.HasPreservablePhysBones(child))
                     continue;
@@ -1282,7 +1233,7 @@ namespace needon.Editor.Pass
                     continue;
 
                 // 이 옷이 해당 파라미터를 명시적으로 설정하지 않았으면 아바타의 기본값으로 리셋
-                if (!info.ClothesValues.ContainsKey(clothes.name))
+                if (!info.ClothesValues.ContainsKey(clothes))
                 {
                     var resetDriver = new ClosetParameterDriverItem
                     {
@@ -1315,23 +1266,16 @@ namespace needon.Editor.Pass
             return driver.name == parameterName;
         }
 
-        private void RecalculateClosetChildren(GameObject closetObject, string uniqueName)
+        /// <summary>
+        /// 의상 MenuItem의 Control.value를 의상 목록 순서(= CreateClosetStates의 상태 번호)로 확정합니다.
+        /// </summary>
+        private void AssignOutfitMenuValues(List<Transform> outfits, string uniqueName)
         {
-            var children = new List<Transform>();
-            foreach (Transform child in closetObject.transform)
+            for (var i = 0; i < outfits.Count; i++)
             {
-                var menuItem = child.GetComponent<ModularAvatarMenuItem>();
-                if (menuItem != null && menuItem.Control is { parameter: not null } && menuItem.Control.parameter.name == uniqueName)
-                    children.Add(child);
-            }
-
-            children = children.OrderBy(t => t.GetSiblingIndex()).ToList();
-
-            for (var i = 0; i < children.Count; i++)
-            {
-                var mi = children[i].GetComponent<ModularAvatarMenuItem>();
-                if (mi != null && mi.Control != null)
-                    mi.Control.value = i;
+                var menuItem = outfits[i].GetComponent<ModularAvatarMenuItem>();
+                if (menuItem != null && menuItem.Control?.parameter?.name == uniqueName)
+                    menuItem.Control.value = i;
             }
         }
     }

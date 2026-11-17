@@ -1,5 +1,4 @@
 ﻿using System;
-using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEditor.Animations;
@@ -16,19 +15,12 @@ namespace needon.Editor.Pass
 {
     internal static class AutoClosetUtil
     {
-        private static readonly char[] InvalidFileNameChars = Path.GetInvalidFileNameChars();
-
-        private static string SanitizeFileName(string name)
-        {
-            if (string.IsNullOrEmpty(name)) return "_";
-            return new string(name.Select(c => InvalidFileNameChars.Contains(c) ? '_' : c).ToArray());
-        }
-
         private static AnimatorControllerLayer AddLayer(AnimatorController animator, string layerName)
         {
             var layer = new AnimatorControllerLayer();
             layer.name = animator.MakeUniqueLayerName(layerName);
             layer.defaultWeight = 1f;
+            layer.blendingMode = AnimatorLayerBlendingMode.Override;
 
             layer.stateMachine = new AnimatorStateMachine();
             layer.stateMachine.name = layer.name.Replace(".", "_");
@@ -98,35 +90,31 @@ namespace needon.Editor.Pass
             });
         }
 
-        public static AnimationClip CreateClosetAnimationClip(GameObject closet, string parentName, string activeClothesName, HashSet<Transform> dynamicsChildren = null)
+        /// <summary>
+        /// 옷장이 관리하는 의상 목록 = 옷장 파라미터를 쓰는 MenuItem을 가진 직계 자식(형제 순서).
+        /// 메뉴 값·상태 번호·클립이 모두 이 목록 하나를 공유해야 번호가 어긋나지 않는다.
+        /// (ToggleCreator의 Toggle 루트처럼 의상이 아닌 자식은 옷장이 건드리지 않는다)
+        /// 해당하는 자식이 하나도 없으면(메뉴 미구성 옷장) 기존처럼 전체 자식을 의상으로 본다.
+        /// </summary>
+        internal static List<Transform> GetClosetOutfits(GameObject closet, string uniqueName)
         {
-            var safeParentName = SanitizeFileName(parentName);
-            var safeClothesName = SanitizeFileName(activeClothesName);
-            var clipPath = $"Packages/nadena.dev.ndmf/__Generated/{safeParentName}/_assets/{safeClothesName}.anim";
-
-            // 디렉토리가 없으면 생성
-            var directory = System.IO.Path.GetDirectoryName(clipPath);
-            if (!System.IO.Directory.Exists(directory))
+            var all = closet.transform.Cast<Transform>().ToList();
+            var outfits = all.Where(child =>
             {
-                if (directory != null) System.IO.Directory.CreateDirectory(directory);
-            }
+                var menuItem = child.GetComponent<ModularAvatarMenuItem>();
+                return menuItem != null && menuItem.Control?.parameter?.name == uniqueName;
+            }).ToList();
 
-            var clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(clipPath);
-            if (clip == null)
-            {
-                clip = new AnimationClip();
-            }
-            else
-            {
-                // 기존 커브 모두 제거
-                foreach (var binding in AnimationUtility.GetCurveBindings(clip))
-                {
-                    AnimationUtility.SetEditorCurve(clip, binding, null);
-                }
-            }
+            return outfits.Count > 0 ? outfits : all;
+        }
 
-            // 아바타 루트 찾기
-            var avatarRoot = closet.transform.root;
+        /// <summary>
+        /// activeOutfit을 입은 상태의 클립을 만듭니다. 클립은 메모리 객체로만 만들고 저장하지 않습니다
+        /// (NDMF가 빌드 끝에 직렬화). 파일 경로를 이름으로 만들면 이름이 같은 의상끼리 클립을 덮어쓴다.
+        /// </summary>
+        public static AnimationClip CreateClosetAnimationClip(IReadOnlyList<Transform> outfits, Transform activeOutfit, Transform avatarRoot, HashSet<Transform> dynamicsChildren)
+        {
+            var clip = new AnimationClip { name = activeOutfit.name };
 
             // WD OFF 대응: 모든 상태에서 모든 프로퍼티를 명시적으로 애니메이션하여
             // MMD 월드 등 외부 시스템에 의한 블렌드셰이프/토글 값 오버라이드를 방지
@@ -135,13 +123,11 @@ namespace needon.Editor.Pass
             var toggleCurves = new Dictionary<string, (EditorCurveBinding binding, AnimationCurve curve)>();
             var rendererCurves = new Dictionary<string, (EditorCurveBinding binding, AnimationCurve curve)>();
 
-            // 모든 옷장 자식(옷)의 활성화 상태를 애니메이션으로 기록
-            foreach (Transform child in closet.transform)
+            // 모든 의상의 활성화 상태를 애니메이션으로 기록
+            foreach (var child in outfits)
             {
-                var isActive = (child.name == activeClothesName);
-                var keepActiveForDynamics = dynamicsChildren != null
-                    ? dynamicsChildren.Contains(child)
-                    : HasPreservablePhysBones(child);
+                var isActive = child == activeOutfit;
+                var keepActiveForDynamics = dynamicsChildren.Contains(child);
 
                 // 두 키프레임으로 클립 길이를 확보 (VRChat 안정성)
                 var val = isActive || keepActiveForDynamics ? 1f : 0f;
@@ -302,67 +288,30 @@ namespace needon.Editor.Pass
                 AnimationUtility.SetEditorCurve(clip, kv.binding, kv.curve);
             }
 
-            if (AssetDatabase.LoadAssetAtPath<AnimationClip>(clipPath) == null)
-            {
-                AssetDatabase.CreateAsset(clip, clipPath);
-            }
-            else
-            {
-                EditorUtility.SetDirty(clip);
-            }
-
-            AssetDatabase.SaveAssets();
-            needon.Editor.Util.ClosetLogger.Log(closet, "Log.Anim.Saved", clipPath);
             return clip;
         }
 
-        public static void ApplyCreateAnimatorLayer(AnimatorController controller, string animatorLayerName)
+        /// <summary>
+        /// 새 레이어를 컨트롤러 끝에 추가하고 반환합니다. 같은 이름의 레이어가 이미 있으면
+        /// 이름을 유일하게 바꿔 추가할 뿐, 기존 레이어는 건드리지 않습니다.
+        /// </summary>
+        public static AnimatorControllerLayer ApplyCreateAnimatorLayer(AnimatorController controller, string animatorLayerName)
         {
-            var layer = AddLayer(controller, animatorLayerName);
-            layer.defaultWeight = 1f;
-            layer.blendingMode = AnimatorLayerBlendingMode.Override;
-            AssetDatabase.SaveAssets();
-
-            var layers = controller.layers;
-            for (var i = 0; i < layers.Length; i++)
-            {
-                if (layers[i].name != animatorLayerName) continue;
-                layers[i] = layer;
-                controller.layers = layers;
-                break;
-            }
+            return AddLayer(controller, animatorLayerName);
         }
 
         /// <summary>
-        /// 단일 타겟에 대해 On 또는 Off 애니메이션 클립을 생성합니다.
+        /// 단일 타겟에 대해 On 또는 Off 애니메이션 클립을 생성합니다. (메모리 객체 — NDMF가 빌드 끝에 직렬화)
         /// </summary>
         /// <param name="target">애니메이션을 기록할 GameObject</param>
-        /// <param name="parentName">클립이 저장될 폴더명 (패키지 내 __Generated 경로 아래)</param>
-        /// <param name="clipName">클립 파일명 (확장자 없이)</param>
+        /// <param name="avatarRoot">경로 기준이 되는 아바타 루트</param>
         /// <param name="isOn">true면 On 클립, false면 Off 클립</param>
-        public static AnimationClip CreateToggleAnimationClip(GameObject target, string parentName, string clipName, bool isOn)
+        public static AnimationClip CreateToggleAnimationClip(GameObject target, Transform avatarRoot, bool isOn)
         {
-            // On/Off 구분 접미사
-            var suffix = isOn ? "On" : "Off";
-            var safeParentName = SanitizeFileName(parentName);
-            var safeClipName = SanitizeFileName(clipName);
-            // Packages/nadena.dev.ndmf/__Generated/{parentName}/_assets/{clipName}_{On|Off}.anim
-            var clipPath = $"Packages/nadena.dev.ndmf/__Generated/{safeParentName}/_assets/{safeClipName}_{suffix}.anim";
+            var clip = new AnimationClip { name = $"{target.name}_{(isOn ? "On" : "Off")}" };
 
-            // 디렉토리 생성
-            var directory = System.IO.Path.GetDirectoryName(clipPath);
-            if (!System.IO.Directory.Exists(directory))
-                System.IO.Directory.CreateDirectory(directory);
-
-            // 기존 클립 불러오기 또는 새로 만들기
-            var clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(clipPath) ?? new AnimationClip();
-            // 기존 커브 제거
-            foreach (var binding in AnimationUtility.GetCurveBindings(clip))
-                AnimationUtility.SetEditorCurve(clip, binding, null);
-
-            // 타겟의 루트(씬 최상위) 기준 상대 경로 계산
-            var root = target.transform.root;
-            var relativePath = GetRelativePath(target.transform, root);
+            // 아바타 루트 기준 상대 경로 (transform.root는 아바타가 다른 오브젝트의 자식이면 틀어진다)
+            var relativePath = GetRelativePath(target.transform, avatarRoot);
             needon.Editor.Util.ClosetLogger.Log(target, "Log.Toggle.SetPath", relativePath, isOn ? 1f : 0f);
 
             // 두 키프레임 커브로 클립 길이 확보 (VRChat 안정성)
@@ -374,28 +323,7 @@ namespace needon.Editor.Pass
                 "m_IsActive"
             );
             AnimationUtility.SetEditorCurve(clip, bindingInfo, curve);
-
-            // 에셋으로 저장
-            if (AssetDatabase.LoadAssetAtPath<AnimationClip>(clipPath) == null)
-                AssetDatabase.CreateAsset(clip, clipPath);
-            else
-                EditorUtility.SetDirty(clip);
-
-            AssetDatabase.SaveAssets();
-            needon.Editor.Util.ClosetLogger.Log(target, "Log.Toggle.ClipSaved", clipPath);
             return clip;
-        }
-
-        /// <summary>
-        /// 지정한 타겟에 대해 On/Off 두 가지 애니메이션 클립을 생성합니다.
-        /// </summary>
-        /// <param name="target">애니메이션을 기록할 GameObject</param>
-        /// <param name="parentName">저장 폴더명</param>
-        /// <param name="clipName">클립 기본 이름</param>
-        public static void CreateToggleAnimations(GameObject target, string parentName, string clipName)
-        {
-            CreateToggleAnimationClip(target, parentName, clipName, true);
-            CreateToggleAnimationClip(target, parentName, clipName, false);
         }
 
         /// <summary>

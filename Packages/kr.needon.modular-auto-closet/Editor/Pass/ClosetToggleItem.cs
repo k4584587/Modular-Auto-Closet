@@ -40,8 +40,9 @@ namespace needon.Editor.Pass
     }
 
 
-    // -------- ClosetToggleItem 용 PropertyDrawer --------
+    // -------- ClosetToggleItem / AutoClosetToggleTarget 용 PropertyDrawer (대상 + ON/OFF) --------
     [CustomPropertyDrawer(typeof(ClosetToggleItem))]
+    [CustomPropertyDrawer(typeof(AutoClosetToggleTarget))]
     public class ClosetToggleItemDrawer : PropertyDrawer
     {
         private const float PopupWidth     = 60f;
