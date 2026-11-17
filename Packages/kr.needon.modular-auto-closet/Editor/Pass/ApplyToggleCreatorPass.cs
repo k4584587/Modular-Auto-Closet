@@ -27,11 +27,10 @@ namespace needon.Editor.Pass
                 if (string.IsNullOrEmpty(paramName)) continue;
 
                 // 유효한 타겟만
-                var targets = toggle.targets?
-                    .Select(t => t.target)
-                    .Where(t => t != null)
+                var items = toggle.targets?
+                    .Where(t => t != null && t.target != null)
                     .ToArray();
-                if (targets == null || targets.Length == 0) continue;
+                if (items == null || items.Length == 0) continue;
 
                 // 파라미터와 레이어 추가
                 AutoClosetUtil.AddAnimatorParameter(fxController, paramName, AnimatorControllerParameterType.Bool);
@@ -41,32 +40,15 @@ namespace needon.Editor.Pass
                 var sm = AutoClosetUtil.ApplyCreateAnimatorLayer(fxController, paramName).stateMachine;
                 var layerIndex = fxController.layers.Length - 1;
 
-                AnimationClip onClip;
-                AnimationClip offClip;
+                // 토글을 켰을 때 각 대상은 설정값(active: ON/OFF)으로, 껐을 때는 그 반대로 둔다.
+                // 대상이 여러 개면 하나의 클립에 합친다.
+                var onClip = new AnimationClip { name = $"{paramName}_On" };
+                var offClip = new AnimationClip { name = $"{paramName}_Off" };
 
-                if (targets.Length == 1)
+                foreach (var item in items)
                 {
-                    // 단일 대상: 기존 로직
-                    var target = targets[0];
-                    onClip = AutoClosetUtil.CreateToggleAnimationClip(target, avatar.transform, true);
-                    offClip = AutoClosetUtil.CreateToggleAnimationClip(target, avatar.transform, false);
-                }
-                else
-                {
-                    // 그룹 대상: 하나의 클립에 모든 타겟 애니메이션 합치기
-                    onClip = new AnimationClip { name = $"{paramName}_Group_On" };
-                    offClip = new AnimationClip { name = $"{paramName}_Group_Off" };
-
-                    foreach (var target in targets)
-                    {
-                        // 각각의 개별 클립 생성
-                        var clipOn = AutoClosetUtil.CreateToggleAnimationClip(target, avatar.transform, true);
-                        var clipOff = AutoClosetUtil.CreateToggleAnimationClip(target, avatar.transform, false);
-
-                        // 머지 유틸로 곡선 합치기
-                        MergeClip(onClip, clipOn);
-                        MergeClip(offClip, clipOff);
-                    }
+                    MergeClip(onClip, AutoClosetUtil.CreateToggleAnimationClip(item.target, avatar.transform, item.active));
+                    MergeClip(offClip, AutoClosetUtil.CreateToggleAnimationClip(item.target, avatar.transform, !item.active));
                 }
 
                 // Blendshape toggle curves
