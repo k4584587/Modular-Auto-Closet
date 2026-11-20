@@ -75,6 +75,7 @@ namespace needon.Editor.Pass
         {
             foreach (var childState in sm.states)
             {
+                if (childState.state == null) continue;
                 foreach (var behavior in childState.state.behaviours)
                 {
                     if (behavior is VRCAnimatorLayerControl lc
@@ -89,7 +90,7 @@ namespace needon.Editor.Pass
 
             foreach (var childSM in sm.stateMachines)
             {
-                if (HasOurLayerControl(childSM.stateMachine, layerIndex))
+                if (childSM.stateMachine != null && HasOurLayerControl(childSM.stateMachine, layerIndex))
                     return true;
             }
 
@@ -106,6 +107,7 @@ namespace needon.Editor.Pass
         {
             foreach (var childState in sm.states)
             {
+                if (childState.state == null) continue;
                 foreach (var behavior in childState.state.behaviours)
                 {
                     if (behavior is VRCAnimatorLayerControl lc
@@ -127,7 +129,8 @@ namespace needon.Editor.Pass
 
             foreach (var childSM in sm.stateMachines)
             {
-                NeutralizeOffendingBehaviors(childSM.stateMachine, protectedLayers, context);
+                if (childSM.stateMachine != null)
+                    NeutralizeOffendingBehaviors(childSM.stateMachine, protectedLayers, context);
             }
         }
     }

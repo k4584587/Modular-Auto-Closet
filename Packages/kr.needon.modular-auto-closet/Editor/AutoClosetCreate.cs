@@ -122,7 +122,7 @@ namespace needon.Editor
                 childMenuItem.Control ??= new VRCExpressionsMenu.Control();
                 childMenuItem.Control.type = VRCExpressionsMenu.Control.ControlType.Toggle;
                 childMenuItem.Control.parameter = new VRCExpressionsMenu.Control.Parameter { name = uniqueName };
-                childMenuItem.Control.value = 0;
+                childMenuItem.Control.value = i;
 
                 // Unified Closet configuration component (replaces separate ClosetBlendshape/ClosetToggle)
                 var closetConfig = child.gameObject.GetComponent<ClosetConfig>();
@@ -242,13 +242,8 @@ namespace needon.Editor
         selected, uniqueName, size: 512, overwrite: false, chromaTol: 0.02f, tempLayer: 31);
     menuItem.Control.icon = thumb != null ? thumb : fallbackIcon;
 
-    // 순서 재계산 및 기본값 0으로 통일
+    // 의상 순번 재계산 (uniqueName 일치 의상만 0부터 부여 — 빌드 패스 AssignOutfitMenuValues 및 MenuTarget 미리보기와 일치)
     RecalculateClosetChildren(closetParent, uniqueName);
-    foreach (Transform child in closetParent.transform)
-    {
-        var mi = child.GetComponent<ModularAvatarMenuItem>();
-        if (mi?.Control != null) mi.Control.value = 0;
-    }
 
     // 씬 갱신
     EditorUtility.SetDirty(selected);
@@ -286,7 +281,10 @@ namespace needon.Editor
             {
                 var mi = children[i].GetComponent<ModularAvatarMenuItem>();
                 if (mi != null && mi.Control != null)
-                    mi.Control.value = i + 1; // 1부터
+                {
+                    mi.Control.value = i; // 0부터 (ApplyAutoClosetPass.AssignOutfitMenuValues와 동일)
+                    EditorUtility.SetDirty(mi);
+                }
             }
         }
     }

@@ -13,9 +13,7 @@ namespace needon.Editor.Pass
         protected override void Execute(BuildContext context)
         {
             var avatar = context.AvatarDescriptor;
-            var fxController = AutoClosetUtil.GetAvatarFxAnimator(avatar) as AnimatorController;
-            if (fxController == null)
-                throw new InvalidOperationException("Cannot find FX Animator Controller.");
+            var fxController = AutoClosetUtil.ResolveFxAnimatorController(avatar, context.AvatarRootObject);
 
             // 새 AutoClosetObjectToggle 컴포넌트를 모두 찾음
             var toggles = avatar.GetComponentsInChildren<AutoClosetObjectToggle>(true);
@@ -26,14 +24,26 @@ namespace needon.Editor.Pass
                 var paramName = menu.Control.parameter.name;
                 if (string.IsNullOrEmpty(paramName)) continue;
 
-                // 유효한 타겟만
+                // 유효한 오브젝트 타겟과 블렌드셰이프 타겟을 함께 수집 (Blendshape-only 토글 허용)
                 var items = toggle.targets?
                     .Where(t => t != null && t.target != null)
                     .ToArray();
-                if (items == null || items.Length == 0) continue;
+
+                var bsToggle = toggle.GetComponent<BlendshapeToggle>();
+                var bsItems = bsToggle?.shapes?
+                    .Where(s => s != null && s.mesh != null && !string.IsNullOrEmpty(s.shapeKey))
+                    .ToArray();
+
+                var hasTargets = items != null && items.Length > 0;
+                var hasShapes = bsItems != null && bsItems.Length > 0;
+                if (!hasTargets && !hasShapes) continue;
+
+                // 파라미터 기본값 조회 (토글 MA Parameters → 아바타 MA Parameters → Expression → FX 순)
+                var defaultOn = AutoClosetUtil.TryGetBoolParameterDefault(avatar, fxController, paramName, out var resolvedDefault, toggle.gameObject)
+                    && resolvedDefault;
 
                 // 파라미터와 레이어 추가
-                AutoClosetUtil.AddAnimatorParameter(fxController, paramName, AnimatorControllerParameterType.Bool);
+                AutoClosetUtil.AddAnimatorParameter(fxController, paramName, AnimatorControllerParameterType.Bool, defaultOn, 0, 0f);
 
                 // 새 레이어는 항상 컨트롤러 끝에 추가된다. 같은 이름의 레이어가 이미 있으면
                 // 이름만 유일하게 바뀌므로, 인덱스를 이름으로 찾으면 기존 레이어를 가리키게 된다.
@@ -45,21 +55,26 @@ namespace needon.Editor.Pass
                 var onClip = new AnimationClip { name = $"{paramName}_On" };
                 var offClip = new AnimationClip { name = $"{paramName}_Off" };
 
-                foreach (var item in items)
+                if (hasTargets)
                 {
-                    MergeClip(onClip, AutoClosetUtil.CreateToggleAnimationClip(item.target, avatar.transform, item.active));
-                    MergeClip(offClip, AutoClosetUtil.CreateToggleAnimationClip(item.target, avatar.transform, !item.active));
+                    foreach (var item in items)
+                    {
+                        MergeClip(onClip, AutoClosetUtil.CreateToggleAnimationClip(item.target, avatar.transform, item.active));
+                        MergeClip(offClip, AutoClosetUtil.CreateToggleAnimationClip(item.target, avatar.transform, !item.active));
+                    }
                 }
 
                 // Blendshape toggle curves
-                var bsToggle = toggle.GetComponent<BlendshapeToggle>();
-                if (bsToggle != null && bsToggle.shapes != null)
+                if (hasShapes)
                 {
-                    foreach (var item in bsToggle.shapes)
+                    foreach (var item in bsItems)
                     {
-                        if (item == null || item.mesh == null) continue;
+                        if (!AutoClosetUtil.TryGetRelativePath(item.mesh.transform, avatar.transform, out var path))
+                        {
+                            needon.Editor.Util.ClosetLogger.LogWarning(toggle, "Log.Target.OutsideAvatar", item.mesh.name);
+                            continue;
+                        }
 
-                        var path = GetRelativePath(item.mesh.transform, avatar.transform);
                         var binding = EditorCurveBinding.FloatCurve(
                             path,
                             typeof(SkinnedMeshRenderer),
@@ -78,11 +93,10 @@ namespace needon.Editor.Pass
 
                 // 상태와 트랜지션 생성
                 var writeDefaults = AutoClosetUtil.ResolveWriteDefaults(context, toggle.gameObject);
-                AddStates(sm, paramName, onClip, offClip, layerIndex, writeDefaults);
+                AddStates(sm, paramName, onClip, offClip, layerIndex, writeDefaults, defaultOn);
             }
 
             EditorUtility.SetDirty(fxController);
-            AssetDatabase.SaveAssets();
         }
 
         // src의 모든 커브를 dest에 복사합니다.
@@ -95,8 +109,8 @@ namespace needon.Editor.Pass
             }
         }
 
-// Off/On 상태와 파라미터 기반 전환을 추가합니다.
-        private static void AddStates(AnimatorStateMachine sm, string paramName, AnimationClip onClip, AnimationClip offClip, int layerIndex, bool writeDefaults)
+        // Off/On 상태와 파라미터 기반 전환을 추가합니다.
+        private static void AddStates(AnimatorStateMachine sm, string paramName, AnimationClip onClip, AnimationClip offClip, int layerIndex, bool writeDefaults, bool defaultOn)
         {
             var stateOff = sm.AddState($"{paramName}_Off");
             stateOff.motion = offClip;
@@ -105,6 +119,8 @@ namespace needon.Editor.Pass
             var stateOn = sm.AddState($"{paramName}_On");
             stateOn.motion = onClip;
             stateOn.writeDefaultValues = writeDefaults;
+
+            sm.defaultState = defaultOn ? stateOn : stateOff;
 
             // Off -> On
             var tOn = stateOff.AddTransition(stateOn);
@@ -138,23 +154,6 @@ namespace needon.Editor.Pass
             t.interruptionSource = TransitionInterruptionSource.None;
 
             EditorUtility.SetDirty(t); // 인스펙터에 값 고정 반영
-        }
-
-
-        private static string GetRelativePath(Transform target, Transform root)
-        {
-            if (target == root) return "";
-
-            var path = target.name;
-            var current = target.parent;
-
-            while (current != null && current != root)
-            {
-                path = current.name + "/" + path;
-                current = current.parent;
-            }
-
-            return path;
         }
     }
 }
