@@ -13,9 +13,7 @@ namespace needon.Editor.Pass
         protected override void Execute(BuildContext context)
         {
             var avatar = context.AvatarDescriptor;
-            var fxController = AutoClosetUtil.GetAvatarFxAnimator(avatar) as AnimatorController;
-            if (fxController == null)
-                throw new InvalidOperationException("Cannot find FX Animator Controller.");
+            var fxController = AutoClosetUtil.ResolveFxAnimatorController(avatar, context.AvatarRootObject);
 
             var toggles = avatar.GetComponentsInChildren<StandaloneToggle>(true);
             foreach (var toggle in toggles)
@@ -34,9 +32,10 @@ namespace needon.Editor.Pass
                     continue;
                 }
 
-                // 3) 기존 파라미터의 보조 레이어 생성
-                var layer = CreateUniqueLayer(fxController, $"{paramName}__StandaloneExt");
+                // 3) 기존 파라미터의 보조 레이어 생성 (서브에셋 등록·고유 이름 보장)
+                var layer = AutoClosetUtil.ApplyCreateAnimatorLayer(fxController, $"{paramName}__StandaloneExt");
                 var sm = layer.stateMachine;
+                var layerIndex = fxController.layers.Length - 1;
 
                 // 4) On/Off 클립(타겟 전부 같은 Bool로 제어)
                 var onClip = new AnimationClip { name = $"{paramName}_On" };
@@ -51,20 +50,14 @@ namespace needon.Editor.Pass
                     MergeClip(offClip, clipOff);
                 }
 
-                // 레이어 인덱스 계산 (이름으로 검색하여 안정성 확보)
-                var layerIndex = Array.FindIndex(fxController.layers, l => l.name == layer.name);
-                if (layerIndex < 0) layerIndex = fxController.layers.Length - 1;
-
                 // 5) 상태/전이 구성
                 var writeDefaults = AutoClosetUtil.ResolveWriteDefaults(context, toggle.gameObject);
                 AddStates(sm, paramName, onClip, offClip, layerIndex, writeDefaults);
 
-                // 6) 초기 상태 - 파라미터 기본값/아이템 기본값에 맞춤
-                var wantOn = items.Any(x => x.active);
-
-                // 가능하면 Animator 파라미터의 defaultBool도 반영
-                var p = fxController.parameters.FirstOrDefault(pp => pp.name == paramName && pp.type == AnimatorControllerParameterType.Bool);
-                if (p != null) wantOn = wantOn || p.defaultBool;
+                // 6) 초기 상태 - 파라미터 기본값 우선, 없으면 아이템 설정으로 폴백
+                var wantOn = AutoClosetUtil.TryGetBoolParameterDefault(avatar, fxController, paramName, out var paramDefault)
+                    ? paramDefault
+                    : items.Any(x => x.active);
 
                 var sOn = sm.states.First(s => s.state.motion == onClip).state;
                 var sOff = sm.states.First(s => s.state.motion == offClip).state;
@@ -72,7 +65,6 @@ namespace needon.Editor.Pass
             }
 
             EditorUtility.SetDirty(fxController);
-            AssetDatabase.SaveAssets();
         }
 
         // 기존 Bool 파라미터 자동 탐색. ToggleCreator 규칙(Toggle_{Owner}_****, Toggle_{Owner})이 우선이고,
@@ -99,23 +91,6 @@ namespace needon.Editor.Pass
             return fuzzy;
         }
 
-        // 기존 레이어와 이름 충돌 없이 보조 레이어 생성
-        private static AnimatorControllerLayer CreateUniqueLayer(AnimatorController fx, string baseName)
-        {
-            var name = baseName;
-            int i = 1;
-            while (fx.layers.Any(l => l.name == name)) name = $"{baseName}_{i++}";
-            var newLayer = new AnimatorControllerLayer
-            {
-                name = name,
-                defaultWeight = 1f,
-                blendingMode = AnimatorLayerBlendingMode.Override,
-                stateMachine = new AnimatorStateMachine { name = name }
-            };
-            fx.AddLayer(newLayer);
-            return fx.layers.First(l => l.name == name);
-        }
-
         private static void MergeClip(AnimationClip dest, AnimationClip src)
         {
             foreach (var binding in AnimationUtility.GetCurveBindings(src))
@@ -123,29 +98,6 @@ namespace needon.Editor.Pass
                 var curve = AnimationUtility.GetEditorCurve(src, binding);
                 dest.SetCurve(binding.path, binding.type, binding.propertyName, curve);
             }
-        }
-
-        private static void ConfigureState(AnimatorState st, bool writeDefaults)
-        {
-            st.writeDefaultValues = writeDefaults;
-            st.speed = 1f;
-            st.mirror = false;
-            st.timeParameterActive = false;
-        }
-
-        private static void ConfigureZeroTransition(AnimatorStateTransition t)
-        {
-            t.hasExitTime = false;
-            t.exitTime = 0f;
-
-            // 즉시 전이
-            t.hasFixedDuration = true;
-            t.duration = 0f;
-
-            t.offset = 0f;
-            t.interruptionSource = TransitionInterruptionSource.None;
-            t.orderedInterruption = false;
-            t.canTransitionToSelf = false;
         }
 
         private static void AddStates(AnimatorStateMachine sm, string paramName, AnimationClip onClip, AnimationClip offClip, int layerIndex, bool writeDefaults)

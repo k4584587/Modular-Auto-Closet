@@ -33,48 +33,105 @@ namespace needon.Editor.Pass
             return layer;
         }
 
-        private static void ErrorDialog(string message)
+        internal static bool TryGetRelativePath(Transform target, Transform root, out string path)
         {
-            EditorUtility.DisplayDialog("ERROR!", message, "OK");
-            throw new Exception(message);
-        }
+            if (target == null || root == null || !target.IsChildOf(root))
+            {
+                path = null;
+                return false;
+            }
 
-        internal static string GetRelativePath(Transform target, Transform root)
-        {
-            if (target == root) return "";
+            if (target == root)
+            {
+                path = "";
+                return true;
+            }
 
-            var path = target.name;
+            var relative = target.name;
             var current = target.parent;
 
             while (current != null && current != root)
             {
-                path = current.name + "/" + path;
+                relative = current.name + "/" + relative;
                 current = current.parent;
             }
 
-            return path;
+            path = relative;
+            return true;
+        }
+
+        internal static string GetRelativePath(Transform target, Transform root)
+        {
+            return TryGetRelativePath(target, root, out var path) ? path : null;
         }
 
         public static RuntimeAnimatorController GetAvatarFxAnimator(VRCAvatarDescriptor avatarDescriptor)
         {
+            if (avatarDescriptor == null || avatarDescriptor.baseAnimationLayers == null)
+                return null;
+
             var controllerLayer = Array.FindIndex(
                 avatarDescriptor.baseAnimationLayers,
                 item => item.type == VRCAvatarDescriptor.AnimLayerType.FX && item.animatorController
             );
 
             if (controllerLayer == -1)
-            {
-                ErrorDialog("Cannot find FX animator controller!");
                 return null;
-            }
 
             var animatorController = avatarDescriptor.baseAnimationLayers[controllerLayer].animatorController;
-            if (animatorController) return animatorController;
-            ErrorDialog("Cannot find FX animator controller!");
-            return null;
+            if (animatorController is AnimatorController)
+                return animatorController;
+
+            if (animatorController is AnimatorOverrideController aoc)
+            {
+                // 빌드 클론(메모리 객체)인 경우에만 베이스 AnimatorController로 언래핑한다.
+                // 디스크 에셋인 경우 원본 오염을 막기 위해 여기서 언래핑하지 않는다.
+                var effective = needon.Editor.Util.ClosetParameterCatalog.GetEffectiveController(aoc);
+                if (effective != null && string.IsNullOrEmpty(AssetDatabase.GetAssetPath(effective)))
+                    return effective;
+            }
+
+            return animatorController;
+        }
+
+        /// <summary>
+        /// 빌드 패스용 FX AnimatorController를 모달 다이얼로그 없이 안전하게 가져옵니다.
+        /// FX가 없거나 디스크 에셋 기반 AnimatorOverrideController인 경우 로그 후 예외를 발생시킵니다.
+        /// </summary>
+        internal static AnimatorController ResolveFxAnimatorController(VRCAvatarDescriptor avatarDescriptor, UnityEngine.Object logContext)
+        {
+            var raw = GetAvatarFxAnimator(avatarDescriptor);
+            if (raw == null)
+            {
+                needon.Editor.Util.ClosetLogger.LogError(logContext, "Log.Fx.NotFound");
+                throw new InvalidOperationException("Cannot find FX Animator Controller.");
+            }
+
+            if (raw is AnimatorController ac)
+                return ac;
+
+            if (raw is AnimatorOverrideController aoc)
+            {
+                needon.Editor.Util.ClosetLogger.LogError(logContext, "Log.Fx.OverrideNotSupported", aoc.name);
+                throw new InvalidOperationException($"FX Animator Controller '{aoc.name}' is an AnimatorOverrideController backed by a disk asset.");
+            }
+
+            needon.Editor.Util.ClosetLogger.LogError(logContext, "Log.Fx.NotFound");
+            throw new InvalidOperationException("Cannot find FX Animator Controller.");
         }
 
         public static void AddAnimatorParameter(AnimatorController controller, string paramName, AnimatorControllerParameterType type)
+        {
+            AddAnimatorParameter(controller, paramName, type, false, 0, 0f);
+        }
+
+        internal static void AddAnimatorParameter(
+            AnimatorController controller,
+            string paramName,
+            AnimatorControllerParameterType type,
+            bool defaultBool,
+            int defaultInt,
+            float defaultFloat)
         {
             var index = 0;
             for (; index < controller.parameters.Length; index++)
@@ -86,8 +143,82 @@ namespace needon.Editor.Pass
             controller.AddParameter(new AnimatorControllerParameter
             {
                 name = paramName,
-                type = type
+                type = type,
+                defaultBool = defaultBool,
+                defaultInt = defaultInt,
+                defaultFloat = defaultFloat
             });
+        }
+
+        /// <summary>
+        /// Bool 파라미터의 기본값을 우선순위(지정 소유자 MA Parameters → 아바타 MA Parameters →
+        /// VRC Expression Parameters → FX AnimatorController)에 따라 조회합니다.
+        /// </summary>
+        internal static bool TryGetBoolParameterDefault(
+            VRCAvatarDescriptor avatar,
+            AnimatorController fxController,
+            string paramName,
+            out bool defaultOn,
+            GameObject preferredOwner = null)
+        {
+            defaultOn = false;
+            if (string.IsNullOrEmpty(paramName))
+                return false;
+
+            if (preferredOwner != null)
+            {
+                var ownerParams = preferredOwner.GetComponent<ModularAvatarParameters>();
+                if (ownerParams != null && ownerParams.parameters != null)
+                {
+                    foreach (var p in ownerParams.parameters)
+                    {
+                        if (p.isPrefix || p.nameOrPrefix != paramName) continue;
+                        defaultOn = !Mathf.Approximately(p.defaultValue, 0f);
+                        return true;
+                    }
+                }
+            }
+
+            if (avatar != null)
+            {
+                var foundInMa = false;
+                foreach (var maParams in avatar.GetComponentsInChildren<ModularAvatarParameters>(true))
+                {
+                    if (maParams == null || maParams.parameters == null) continue;
+                    foreach (var p in maParams.parameters)
+                    {
+                        if (p.isPrefix || p.nameOrPrefix != paramName) continue;
+                        defaultOn = !Mathf.Approximately(p.defaultValue, 0f);
+                        foundInMa = true;
+                    }
+                }
+
+                if (foundInMa)
+                    return true;
+
+                if (avatar.expressionParameters != null && avatar.expressionParameters.parameters != null)
+                {
+                    foreach (var p in avatar.expressionParameters.parameters)
+                    {
+                        if (p.name != paramName) continue;
+                        defaultOn = !Mathf.Approximately(p.defaultValue, 0f);
+                        return true;
+                    }
+                }
+            }
+
+            if (fxController != null)
+            {
+                var fxParam = fxController.parameters.FirstOrDefault(
+                    pp => pp.name == paramName && pp.type == AnimatorControllerParameterType.Bool);
+                if (fxParam != null)
+                {
+                    defaultOn = fxParam.defaultBool;
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -137,7 +268,11 @@ namespace needon.Editor.Pass
                 );
 
                 // 아바타 루트로부터의 상대 경로 계산
-                var relativePath = GetRelativePath(child.transform, avatarRoot);
+                if (!TryGetRelativePath(child.transform, avatarRoot, out var relativePath))
+                {
+                    needon.Editor.Util.ClosetLogger.LogWarning(child, "Log.Target.OutsideAvatar", child.name);
+                    continue;
+                }
                 needon.Editor.Util.ClosetLogger.Log(child, "Log.Anim.Path", relativePath, isActive);
 
                 var binding = EditorCurveBinding.FloatCurve(
@@ -168,7 +303,11 @@ namespace needon.Editor.Pass
                             // 활성 의상: 설정된 값, 비활성 의상: 반대값(리셋)
                             float toggleValue = (isActive == toggle.active) ? 1f : 0f;
 
-                            var togglePath = GetRelativePath(toggle.target.transform, avatarRoot);
+                            if (!TryGetRelativePath(toggle.target.transform, avatarRoot, out var togglePath))
+                            {
+                                needon.Editor.Util.ClosetLogger.LogWarning(child, "Log.Target.OutsideAvatar", toggle.target.name);
+                                continue;
+                            }
                             needon.Editor.Util.ClosetLogger.Log(child, "Log.Toggle.Path", togglePath, isActive);
 
                             var toggleBinding = EditorCurveBinding.FloatCurve(
@@ -186,11 +325,15 @@ namespace needon.Editor.Pass
                     {
                         foreach (var item in closetConfig.shapes)
                         {
-                            if (item == null || item.mesh == null) continue;
+                            if (item == null || item.mesh == null || string.IsNullOrEmpty(item.shapeKey)) continue;
 
                             var value = isActive ? item.value : 0f;
 
-                            var bsPath = GetRelativePath(item.mesh.transform, avatarRoot);
+                            if (!TryGetRelativePath(item.mesh.transform, avatarRoot, out var bsPath))
+                            {
+                                needon.Editor.Util.ClosetLogger.LogWarning(child, "Log.Target.OutsideAvatar", item.mesh.name);
+                                continue;
+                            }
                             needon.Editor.Util.ClosetLogger.Log(child, "Log.Blendshape.Path", bsPath, isActive);
 
                             var property = $"blendShape.{item.shapeKey}";
@@ -226,7 +369,11 @@ namespace needon.Editor.Pass
 
                             float toggleValue = (isActive == toggle.active) ? 1f : 0f;
 
-                            var togglePath = GetRelativePath(toggle.target.transform, avatarRoot);
+                            if (!TryGetRelativePath(toggle.target.transform, avatarRoot, out var togglePath))
+                            {
+                                needon.Editor.Util.ClosetLogger.LogWarning(child, "Log.Target.OutsideAvatar", toggle.target.name);
+                                continue;
+                            }
                             needon.Editor.Util.ClosetLogger.Log(child, "Log.Toggle.Path", togglePath, isActive);
 
                             var toggleBinding = EditorCurveBinding.FloatCurve(
@@ -244,10 +391,14 @@ namespace needon.Editor.Pass
                     {
                         foreach (var item in closetBlendshape.shapes)
                         {
-                            if (item == null || item.mesh == null) continue;
+                            if (item == null || item.mesh == null || string.IsNullOrEmpty(item.shapeKey)) continue;
 
                             var value = isActive ? item.value : 0f;
-                            var bsPath = GetRelativePath(item.mesh.transform, avatarRoot);
+                            if (!TryGetRelativePath(item.mesh.transform, avatarRoot, out var bsPath))
+                            {
+                                needon.Editor.Util.ClosetLogger.LogWarning(child, "Log.Target.OutsideAvatar", item.mesh.name);
+                                continue;
+                            }
                             needon.Editor.Util.ClosetLogger.Log(child, "Log.Blendshape.Path", bsPath, isActive);
                             var property = $"blendShape.{item.shapeKey}";
                             var bsBinding = EditorCurveBinding.FloatCurve(
@@ -310,8 +461,12 @@ namespace needon.Editor.Pass
         {
             var clip = new AnimationClip { name = $"{target.name}_{(isOn ? "On" : "Off")}" };
 
-            // 아바타 루트 기준 상대 경로 (transform.root는 아바타가 다른 오브젝트의 자식이면 틀어진다)
-            var relativePath = GetRelativePath(target.transform, avatarRoot);
+            // 아바타 루트 기준 상대 경로 (아바타 밖 타겟이면 잘못된 씬 루트 경로를 기록하지 않도록 스킵)
+            if (!TryGetRelativePath(target.transform, avatarRoot, out var relativePath))
+            {
+                needon.Editor.Util.ClosetLogger.LogWarning(avatarRoot, "Log.Target.OutsideAvatar", target.name);
+                return clip;
+            }
             needon.Editor.Util.ClosetLogger.Log(target, "Log.Toggle.SetPath", relativePath, isOn ? 1f : 0f);
 
             // 두 키프레임 커브로 클립 길이 확보 (VRChat 안정성)
@@ -535,7 +690,7 @@ namespace needon.Editor.Pass
         }
 
         /// <summary>
-        /// FX 컨트롤러를 다이얼로그/예외 없이 탐색합니다. 없으면 null.
+        /// FX 컨트롤러를 다이얼로그/예외 없이 탐색합니다. AnimatorOverrideController면 베이스를 풉니다. 없으면 null.
         /// </summary>
         private static AnimatorController FindAvatarFxAnimator(VRCAvatarDescriptor avatarDescriptor)
         {
@@ -545,7 +700,7 @@ namespace needon.Editor.Pass
             foreach (var layer in avatarDescriptor.baseAnimationLayers)
             {
                 if (layer.type == VRCAvatarDescriptor.AnimLayerType.FX && layer.animatorController != null)
-                    return layer.animatorController as AnimatorController;
+                    return needon.Editor.Util.ClosetParameterCatalog.GetEffectiveController(layer.animatorController);
             }
 
             return null;
@@ -629,6 +784,9 @@ namespace needon.Editor.Pass
         /// (예: Body 축소/삭제 셰이프 잔류, 속옷 숨김 토글 상시 발동). 이 경우 PhysBone 보존을
         /// 포기하고 바닐라 m_IsActive 토글로 되돌려야 MA의 게이트가 정상 동작합니다.
         /// 의상 내부만 타겟하는 리액티브 컴포넌트는 렌더러가 꺼져 있으면 보이지 않으므로 보존과 양립합니다.
+        /// 참고: MA ReactiveObjectAnalyzer는 컴포넌트 enabled를 보지 않고 activeSelf 프록시 기반으로
+        /// 비활성 자식까지 컴파일하므로(토글/애니메이터로 런타임에 켜질 수 있음), EditorOnly만 제외하고
+        /// 보수적으로 전체 자식을 검사합니다.
         /// </summary>
         internal static bool HasExternalReactiveTargets(Transform closetChild)
         {
@@ -637,11 +795,29 @@ namespace needon.Editor.Pass
 
             foreach (var component in closetChild.GetComponentsInChildren<ReactiveComponent>(true))
             {
+                if (component == null || IsEditorOnlyInSubtree(component.transform, closetChild))
+                    continue;
+
                 foreach (var target in EnumerateReactiveTargets(component))
                 {
                     if (target != null && !target.transform.IsChildOf(closetChild))
                         return true;
                 }
+            }
+
+            return false;
+        }
+
+        private static bool IsEditorOnlyInSubtree(Transform t, Transform stopAt)
+        {
+            var cur = t;
+            while (cur != null)
+            {
+                if (cur.gameObject.CompareTag("EditorOnly"))
+                    return true;
+                if (cur == stopAt)
+                    break;
+                cur = cur.parent;
             }
 
             return false;
@@ -683,7 +859,8 @@ namespace needon.Editor.Pass
                 if (renderer == null)
                     continue;
 
-                var rendererPath = GetRelativePath(renderer.transform, avatarRoot);
+                if (!TryGetRelativePath(renderer.transform, avatarRoot, out var rendererPath))
+                    continue;
                 var rendererBinding = EditorCurveBinding.FloatCurve(
                     rendererPath,
                     renderer.GetType(),

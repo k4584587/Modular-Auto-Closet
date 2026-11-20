@@ -23,12 +23,7 @@ namespace needon.Editor.Pass
             try
             {
                 var avatar = context.AvatarDescriptor;
-                _autoClosetController = (AnimatorController)AutoClosetUtil.GetAvatarFxAnimator(avatar);
-
-                if (_autoClosetController == null)
-                {
-                    throw new InvalidOperationException("Cannot find FX Animator Controller.");
-                }
+                _autoClosetController = AutoClosetUtil.ResolveFxAnimatorController(avatar, context.AvatarRootObject);
 
                 // Auto WD 감지를 옷장 레이어 추가 전(순수 아바타 FX) 1회 측정해 캐싱
                 // (ResolveWriteDefaults는 On/Off 모드면 캐시를 건너뛰므로 무조건 워밍)
@@ -100,13 +95,15 @@ namespace needon.Editor.Pass
                     ActivateDynamicHierarchies(closetGameObject, dynamicsChildren);
                     ExcludeDynamicPhysBonesFromTraceAndOptimize(context.AvatarRootObject, dynamicsChildren);
 
+                    var defaultOutfitIndex = ResolveDefaultOutfitIndex(uniqueName, outfits.Count, avatarParameterDefaults);
+
                     // 각 옷장마다 별도의 애니메이터 레이어와 파라미터 생성
-                    CreateLayerAndParameter(uniqueName);
+                    CreateLayerAndParameter(uniqueName, defaultOutfitIndex);
                     var layerIndex = FindAutoClosetLayerIndex(uniqueName);
                     var stateMachine = _autoClosetController.layers[layerIndex].stateMachine;
 
                     var writeDefaults = AutoClosetUtil.ResolveWriteDefaults(context, closetGameObject);
-                    CreateClosetStates(closetGameObject, outfits, stateMachine, uniqueName, context, layerIndex, writeDefaults, avatarParameterDefaults, dynamicsChildren);
+                    CreateClosetStates(closetGameObject, outfits, stateMachine, uniqueName, context, layerIndex, writeDefaults, avatarParameterDefaults, dynamicsChildren, defaultOutfitIndex);
                 }
 
                 DisableInactiveDynamicsRenderers(originallyInactiveDynamics);
@@ -130,7 +127,22 @@ namespace needon.Editor.Pass
             return parameterConfig.nameOrPrefix;
         }
 
-        private void CreateLayerAndParameter(string uniqueName)
+        private static int ResolveDefaultOutfitIndex(string uniqueName, int outfitCount, Dictionary<string, float> avatarParameterDefaults)
+        {
+            if (outfitCount <= 0)
+                return 0;
+
+            if (avatarParameterDefaults != null && avatarParameterDefaults.TryGetValue(uniqueName, out var rawDefault))
+            {
+                var idx = Mathf.RoundToInt(rawDefault);
+                if (idx >= 0 && idx < outfitCount)
+                    return idx;
+            }
+
+            return 0;
+        }
+
+        private void CreateLayerAndParameter(string uniqueName, int defaultInt)
         {
             // 1) 레이어 존재 여부 확인 후 없을 때만 생성 (Unity 2022 호환)
             var hasLayer = _autoClosetController.layers.Any(l => l.name == uniqueName);
@@ -144,7 +156,7 @@ namespace needon.Editor.Pass
                 p.name == uniqueName && p.type == AnimatorControllerParameterType.Int);
             if (!hasIntParam)
             {
-                AutoClosetUtil.AddAnimatorParameter(_autoClosetController, uniqueName, AnimatorControllerParameterType.Int);
+                AutoClosetUtil.AddAnimatorParameter(_autoClosetController, uniqueName, AnimatorControllerParameterType.Int, false, defaultInt, 0f);
             }
 
             // 매 호출마다 저장하지 않고 더티 마킹만 수행 (Unity 2022: 성능/에셋 락 이슈 방지)
@@ -173,20 +185,21 @@ namespace needon.Editor.Pass
 
         }
 
-        private void CreateClosetStates(GameObject closet, List<Transform> outfits, AnimatorStateMachine stateMachine, string uniqueName, BuildContext context, int layerIndex, bool writeDefaults, Dictionary<string, float> avatarParameterDefaults, HashSet<Transform> dynamicsChildren)
+        private void CreateClosetStates(GameObject closet, List<Transform> outfits, AnimatorStateMachine stateMachine, string uniqueName, BuildContext context, int layerIndex, bool writeDefaults, Dictionary<string, float> avatarParameterDefaults, HashSet<Transform> dynamicsChildren, int defaultOutfitIndex)
         {
             // 옷장의 모든 파라미터 드라이버를 수집하여 스마트 리셋 정보 생성
             var parameterResetInfo = CollectParameterResetInfo(closet, outfits, uniqueName, context, avatarParameterDefaults);
             ApplyImplicitMenuParameterDefaultsToAnimator(parameterResetInfo);
 
-            // 의상 목록의 순서 = 메뉴 값(AssignOutfitMenuValues) = 전환 조건. 첫 의상이 기본 상태.
+            // 의상 목록의 순서 = 메뉴 값(AssignOutfitMenuValues) = 전환 조건.
+            // AutoCloset_* 파라미터의 defaultValue가 유효 범위면 해당 의상을 기본 상태로 지정한다.
             for (var i = 0; i < outfits.Count; i++)
             {
                 var outfit = outfits[i];
                 var state = stateMachine.AddState(outfit.name, new Vector3(300, i * 60, 0));
                 state.motion = AutoClosetUtil.CreateClosetAnimationClip(outfits, outfit, context.AvatarRootTransform, dynamicsChildren);
                 state.writeDefaultValues = writeDefaults;
-                if (i == 0)
+                if (i == defaultOutfitIndex)
                     stateMachine.defaultState = state;
 
                 ConfigureTransition(stateMachine.AddAnyStateTransition(state), i, uniqueName);
@@ -326,7 +339,7 @@ namespace needon.Editor.Pass
 
                 foreach (var param in maParam.parameters)
                 {
-                    if (!string.IsNullOrEmpty(param.nameOrPrefix))
+                    if (!param.isPrefix && !string.IsNullOrEmpty(param.nameOrPrefix))
                     {
                         // 0f is a valid default, so no need to check for non-zero.
                         avatarParameters[param.nameOrPrefix] = param.defaultValue;
@@ -378,7 +391,7 @@ namespace needon.Editor.Pass
 
                 foreach (var param in maParam.parameters)
                 {
-                    if (param.saved && !string.IsNullOrEmpty(param.nameOrPrefix))
+                    if (!param.isPrefix && param.saved && !string.IsNullOrEmpty(param.nameOrPrefix))
                         saved.Add(param.nameOrPrefix);
                 }
             }
@@ -845,7 +858,7 @@ namespace needon.Editor.Pass
                     continue;
                 }
 
-                var parentMenuItem = reactiveComponent.GetComponentInParent<ModularAvatarMenuItem>();
+                var parentMenuItem = reactiveComponent.GetComponentInParent<ModularAvatarMenuItem>(true);
                 if (parentMenuItem == menuItem)
                 {
                     yield return reactiveComponent;
@@ -1164,7 +1177,12 @@ namespace needon.Editor.Pass
 
         private string CreateStableMenuParameterName(GameObject closet, ModularAvatarMenuItem menuItem, string uniqueName)
         {
-            var relativePath = AutoClosetUtil.GetRelativePath(menuItem.transform, closet.transform);
+            if (!AutoClosetUtil.TryGetRelativePath(menuItem.transform, closet.transform, out var relativePath))
+            {
+                var avatar = closet.GetComponentInParent<VRCAvatarDescriptor>(true);
+                if (avatar == null || !AutoClosetUtil.TryGetRelativePath(menuItem.transform, avatar.transform, out relativePath))
+                    relativePath = menuItem.gameObject.name;
+            }
             var readableName = SanitizeParameterSegment(menuItem.gameObject.name);
             return $"{ImplicitMenuParameterPrefix}{readableName}_{ShortHash(uniqueName + "/" + relativePath)}";
         }
@@ -1276,6 +1294,36 @@ namespace needon.Editor.Pass
                 var menuItem = outfits[i].GetComponent<ModularAvatarMenuItem>();
                 if (menuItem != null && menuItem.Control?.parameter?.name == uniqueName)
                     menuItem.Control.value = i;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Resolving 페이즈의 NDMF RemoveEditorOnlyPass 직전에 실행되어,
+    /// 옷장 직계 자식 중 EditorOnly 태그가 붙어 빌드/메뉴에서 제외될 오브젝트를 미리 경고합니다.
+    /// </summary>
+    internal class WarnEditorOnlyOutfitsPass : Pass<WarnEditorOnlyOutfitsPass>
+    {
+        protected override void Execute(BuildContext context)
+        {
+            var avatar = context.AvatarRootObject;
+            if (avatar == null) return;
+
+            var closets = avatar.GetComponentsInChildren<AutoCloset>(true);
+            foreach (var closet in closets)
+            {
+                if (closet == null) continue;
+                foreach (Transform child in closet.transform)
+                {
+                    if (child == null || !child.gameObject.CompareTag("EditorOnly"))
+                        continue;
+
+                    needon.Editor.Util.ClosetLogger.LogWarning(
+                        closet,
+                        "Log.Closet.EditorOnlyOutfit",
+                        closet.gameObject.name,
+                        child.name);
+                }
             }
         }
     }

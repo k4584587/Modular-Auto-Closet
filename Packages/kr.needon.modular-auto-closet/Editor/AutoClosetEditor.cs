@@ -1,4 +1,6 @@
-﻿using UnityEditor;
+﻿using System.Collections.Generic;
+using System.Linq;
+using UnityEditor;
 using UnityEngine;
 using VRC.SDK3.Avatars.Components;
 
@@ -95,8 +97,12 @@ namespace needon.Editor
                 EditorGUILayout.HelpBox(
                     needon.Editor.Util.ClosetLocalization.Get(_component, "AutoCloset.PlaceInsideAvatar"),
                     MessageType.Error);
+                _serialObj.ApplyModifiedProperties();
                 return;
             }
+
+            // EditorOnly 태그가 붙은 직계 자식 경고 및 원클릭 복구 (VRC Hierarchy Highlighter 오클릭 등 방지)
+            DrawEditorOnlyWarning();
 
             // Settings field
             EditorGUILayout.PropertyField(
@@ -147,6 +153,36 @@ namespace needon.Editor
             EditorGUILayout.EndHorizontal();
 
             _serialObj.ApplyModifiedProperties();
+        }
+
+        private void DrawEditorOnlyWarning()
+        {
+            var editorOnlyChildren = new List<GameObject>();
+            foreach (Transform child in _component.transform)
+            {
+                if (child != null && child.gameObject.CompareTag("EditorOnly"))
+                    editorOnlyChildren.Add(child.gameObject);
+            }
+
+            if (editorOnlyChildren.Count == 0)
+                return;
+
+            var names = string.Join(", ", editorOnlyChildren.Select(go => go.name));
+            EditorGUILayout.HelpBox(
+                needon.Editor.Util.ClosetLocalization.Get(_component, "AutoCloset.Warning.EditorOnly", names),
+                MessageType.Warning);
+
+            if (GUILayout.Button(needon.Editor.Util.ClosetLocalization.Get(_component, "AutoCloset.Button.ClearEditorOnly")))
+            {
+                Undo.RecordObjects(editorOnlyChildren.ToArray(), "Clear EditorOnly Tag");
+                foreach (var go in editorOnlyChildren)
+                {
+                    go.tag = "Untagged";
+                    EditorUtility.SetDirty(go);
+                }
+            }
+
+            GUILayout.Space(4);
         }
 
         // FX 컨트롤러 참조가 바뀐 경우에만 전체 상태 다수결을 다시 계산한다.

@@ -1,17 +1,88 @@
 ﻿#if UNITY_EDITOR
+using System;
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
+using VRC.SDK3.Avatars.Components;
 
 namespace needon.Editor
 {
     public static class HierarchyGUI
     {
         private const int IconSize = 16;
+        // VRC Hierarchy Highlighter 우측 체크박스(kIconSize=20)와 겹치지 않도록 1칸 왼쪽에 배치
+        private const float RightOffset = 22f;
+        private const string ToggleIconPath = "Packages/kr.needon.modular-auto-closet/Resource/toggleON.png";
+
+        private static Texture2D _toggleIcon;
+        private static bool _toggleIconLoaded;
+        private static readonly HashSet<int> _toggleAncestorIds = new HashSet<int>();
+        private static bool _cacheDirty = true;
 
         [InitializeOnLoadMethod]
         private static void Initialize()
         {
             EditorApplication.hierarchyWindowItemOnGUI += OnGUI;
+            EditorApplication.hierarchyChanged += MarkCacheDirty;
+        }
+
+        private static void MarkCacheDirty()
+        {
+            _cacheDirty = true;
+        }
+
+        private static void EnsureToggleAncestorCache()
+        {
+            if (!_cacheDirty) return;
+            _cacheDirty = false;
+            _toggleAncestorIds.Clear();
+
+            var toggles = UnityEngine.Object.FindObjectsOfType<AutoClosetObjectToggle>(true);
+            foreach (var t in toggles)
+            {
+                if (t == null) continue;
+
+                // 상위 옷장 루트까지(옷장 없는 아바타 토글이면 아바타 루트 직전까지) 조상을 캐싱
+                var stopAt = FindClosetRoot(t.transform);
+                if (stopAt == null)
+                {
+                    var avatar = t.GetComponentInParent<VRCAvatarDescriptor>(true);
+                    stopAt = avatar != null ? avatar.transform : null;
+                }
+
+                if (stopAt == null) continue;
+
+                var cur = t.transform.parent;
+                while (cur != null && cur != stopAt)
+                {
+                    _toggleAncestorIds.Add(cur.gameObject.GetInstanceID());
+                    cur = cur.parent;
+                }
+            }
+        }
+
+        private static Texture2D GetToggleIcon()
+        {
+            if (!_toggleIconLoaded)
+            {
+                _toggleIcon = AssetDatabase.LoadAssetAtPath<Texture2D>(ToggleIconPath);
+                _toggleIconLoaded = true;
+            }
+            return _toggleIcon;
+        }
+
+        private static Texture2D GetComponentIcon(Component component)
+        {
+            var componentType = component.GetType();
+            if (componentType == typeof(AutoClosetObjectToggle))
+            {
+                var toggleIcon = GetToggleIcon();
+                if (toggleIcon != null) return toggleIcon;
+            }
+
+            // 타입별로 캐싱하지 않는다: ScriptIconInitializer가 delayCall로 아이콘을 늦게 입히므로,
+            // 그 전에 캐싱하면 기본 스크립트 아이콘이 도메인 리로드까지 고정된다.
+            return AssetPreview.GetMiniThumbnail(component);
         }
 
         private static void OnGUI(int instanceID, Rect selectionRect)
@@ -22,13 +93,15 @@ namespace needon.Editor
                 return;
             }
 
+            EnsureToggleAncestorCache();
+
             var hasSelf = HasClosetComponents(gameObject);
-            var hasChildToggle = !hasSelf && HasChildToggleComponent(gameObject);
+            var hasChildToggle = !hasSelf && _toggleAncestorIds.Contains(instanceID);
 
             if (!hasSelf && !hasChildToggle) return;
 
-            // 아이콘을 오른쪽 끝에 배치
-            var iconRect = new Rect(selectionRect.xMax - IconSize, selectionRect.y, IconSize, IconSize);
+            // 우측 끝 체크박스(VRC Hierarchy Highlighter 등)와 겹치지 않도록 왼쪽으로 오프셋
+            var iconRect = new Rect(selectionRect.xMax - RightOffset - IconSize, selectionRect.y, IconSize, IconSize);
 
             if (hasSelf)
             {
@@ -37,9 +110,8 @@ namespace needon.Editor
             }
             else if (hasChildToggle)
             {
-                // 자식에 토글이 있으면 부모에도 토글 아이콘 표시
-                var icon = AssetDatabase.LoadAssetAtPath<Texture2D>(
-                    "Packages/kr.needon.modular-auto-closet/Resource/toggleON.png");
+                // 자식에 토글이 있으면 부모(Toggle 폴더 등)에도 토글 아이콘 표시
+                var icon = GetToggleIcon();
                 if (icon != null)
                 {
                     GUI.DrawTexture(iconRect, icon);
@@ -55,28 +127,6 @@ namespace needon.Editor
                    || gameObject.GetComponent<AutoClosetObjectToggle>();
         }
 
-        private static bool HasChildToggleComponent(GameObject gameObject)
-        {
-            var toggles = gameObject.GetComponentsInChildren<AutoClosetObjectToggle>(true);
-            if (toggles == null || toggles.Length == 0) return false;
-
-            foreach (var t in toggles)
-            {
-                if (t == null || t.gameObject == gameObject) continue;
-
-                // 해당 토글이 속한 Closet 루트
-                var closetRoot = FindClosetRoot(t.transform);
-                if (closetRoot == null) continue;
-
-                // gameObject 가 closetRoot와 토글 사이(또는 closetRoot 자체)일 때만 표시
-                if (IsAncestor(gameObject.transform, t.transform) && IsAncestor(closetRoot, gameObject.transform))
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-
         private static Transform FindClosetRoot(Transform t)
         {
             while (t != null)
@@ -86,18 +136,6 @@ namespace needon.Editor
                 t = t.parent;
             }
             return null;
-        }
-
-        private static bool IsAncestor(Transform maybeAncestor, Transform child)
-        {
-            if (maybeAncestor == null || child == null) return false;
-            var cur = child;
-            while (cur != null)
-            {
-                if (cur == maybeAncestor) return true;
-                cur = cur.parent;
-            }
-            return false;
         }
 
         private static void DrawIcons(Component[] components, Rect iconRect)
@@ -112,17 +150,7 @@ namespace needon.Editor
                 var componentType = component.GetType();
                 if (componentType != typeof(AutoCloset) && componentType != typeof(ClosetToggle) && componentType != typeof(ClosetConfig) && componentType != typeof(AutoClosetObjectToggle)) continue;
 
-                // Toggle는 전용 아이콘 사용 시도, 없으면 기본 썸네일
-                Texture2D icon = null;
-                if (componentType == typeof(AutoClosetObjectToggle))
-                {
-                    icon = AssetDatabase.LoadAssetAtPath<Texture2D>(
-                        "Packages/kr.needon.modular-auto-closet/Resource/toggleON.png");
-                }
-                if (icon == null)
-                {
-                    icon = AssetPreview.GetMiniThumbnail(component);
-                }
+                var icon = GetComponentIcon(component);
                 if (icon == null) continue;
                 GUI.DrawTexture(iconRect, icon);
                 iconRect.x -= IconSize; // 여러 아이콘이 겹치지 않게 왼쪽으로 이동

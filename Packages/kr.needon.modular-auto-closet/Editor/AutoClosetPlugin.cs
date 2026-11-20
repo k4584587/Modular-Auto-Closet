@@ -13,6 +13,11 @@ namespace needon.Editor
 
         protected override void Configure()
         {
+            // Resolving: RemoveEditorOnlyPass가 EditorOnly 의상을 삭제하기 직전에 경고 로그를 남김
+            InPhase(BuildPhase.Resolving)
+                .Run(WarnEditorOnlyOutfitsPass.Instance)
+                .BeforePass(nadena.dev.ndmf.builtin.RemoveEditorOnlyPass.Instance);
+
             InPhase(BuildPhase.Generating)
                 .WithRequiredExtension(typeof(AutoClosetContext), s =>
                     s.Run(ApplyAutoClosetPass.Instance)
