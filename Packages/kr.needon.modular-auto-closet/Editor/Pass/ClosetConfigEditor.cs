@@ -33,11 +33,12 @@ namespace needon.Editor.Pass
         {
             _component = (ClosetConfig)target;
 
-            // Ensure arrays are non-null for clean drawing
-            if (_component.toggles == null) _component.toggles = new ClosetToggleItem[0];
-            if (_component.shapes  == null) _component.shapes  = new ClosetBlendshapeItem[0];
-            if (_component.drivers == null) _component.drivers = new ClosetParameterDriverItem[0];
-            EditorUtility.SetDirty(_component);
+            // Ensure arrays are non-null for clean drawing (실제 초기화가 일어난 경우에만 Dirty 마킹)
+            bool modified = false;
+            if (_component.toggles == null) { _component.toggles = new ClosetToggleItem[0]; modified = true; }
+            if (_component.shapes  == null) { _component.shapes  = new ClosetBlendshapeItem[0]; modified = true; }
+            if (_component.drivers == null) { _component.drivers = new ClosetParameterDriverItem[0]; modified = true; }
+            if (modified) EditorUtility.SetDirty(_component);
 
             // Set icon
             var iconTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(
@@ -51,8 +52,9 @@ namespace needon.Editor.Pass
 
         public void OnDisable()
         {
-            // Restore original values when inspector is closed
+            // Restore original values and reset preview flag when inspector is closed
             RestoreOriginalBlendshapes();
+            _previewEnabled = false;
         }
 
         private static void RestoreOriginalBlendshapes()
@@ -89,7 +91,7 @@ namespace needon.Editor.Pass
 
         public static void ApplyBlendshapePreview(SkinnedMeshRenderer mesh, string shapeKey, float value)
         {
-            if (!_previewEnabled || mesh == null || string.IsNullOrEmpty(shapeKey)) return;
+            if (!_previewEnabled || mesh == null || mesh.sharedMesh == null || string.IsNullOrEmpty(shapeKey)) return;
 
             int index = mesh.sharedMesh.GetBlendShapeIndex(shapeKey);
             if (index < 0) return;
@@ -108,7 +110,7 @@ namespace needon.Editor.Pass
 
             foreach (var shape in _component.shapes)
             {
-                if (shape == null || shape.mesh == null || string.IsNullOrEmpty(shape.shapeKey)) continue;
+                if (shape == null || shape.mesh == null || shape.mesh.sharedMesh == null || string.IsNullOrEmpty(shape.shapeKey)) continue;
 
                 int index = shape.mesh.sharedMesh.GetBlendShapeIndex(shape.shapeKey);
                 if (index < 0) continue;

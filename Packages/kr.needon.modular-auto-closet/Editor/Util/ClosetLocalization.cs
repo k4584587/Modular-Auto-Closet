@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
-using System.IO;
 
 namespace needon.Editor.Util
 {
@@ -13,7 +12,13 @@ namespace needon.Editor.Util
         private const string LocalizationPath = "Packages/kr.needon.modular-auto-closet/Resource/Localization.json";
 
         private static Dictionary<string, Dictionary<string, string>> _table; // lang -> key -> value
-        private static DateTime _lastLoad = DateTime.MinValue;
+        private static AutoCloset _cachedFallbackCloset;
+        private static bool _fallbackClosetDirty = true;
+
+        static ClosetLocalization()
+        {
+            EditorApplication.hierarchyChanged += () => _fallbackClosetDirty = true;
+        }
 
         private static void EnsureLoaded()
         {
@@ -34,69 +39,13 @@ namespace needon.Editor.Util
             }
             try
             {
-                var root = JsonUtility.FromJson<Wrapper>(WrapJson(text.text));
-                if (root != null && root.items != null)
-                {
-                    foreach (var lang in root.items)
-                    {
-                        _table[lang.code] = new Dictionary<string, string>(StringComparer.Ordinal);
-                        foreach (var entry in lang.entries)
-                        {
-                            _table[lang.code][entry.key] = entry.value;
-                        }
-                    }
-                }
-                _lastLoad = DateTime.Now;
+                _table = SimpleJson.Parse(text.text);
             }
             catch (Exception e)
             {
                 Debug.LogError($"Failed to parse localization JSON: {e.Message}");
             }
         }
-
-        // Unity's JsonUtility doesn't support dictionaries; convert to arrays
-        [Serializable]
-        private class Wrapper { public LangBlock[] items; }
-        [Serializable]
-        private class LangBlock { public string code; public Entry[] entries; }
-        [Serializable]
-        private class Entry { public string key; public string value; }
-
-        private static string WrapJson(string raw)
-        {
-            // raw shape: { "en": {"K":"V"}, "ko": {...} }
-            // convert to: { "items": [ {"code":"en", "entries":[{"key":"K","value":"V"}, ...]}, ... ] }
-            // Do a quick-and-safe transform via MiniJSON or manual parsing; here we use EditorJsonUtility twice.
-            // For simplicity and robustness, fall back to a very small JSON walker using JsonUtility by stages.
-
-            // Use an auxiliary Mini parser via JSON.Net is not available; so do a lightweight conversion via Unity's
-            // Json for known structure by re-parsing with EditorJsonUtility and a Temporary ScriptableObject.
-
-            // Because writing a full converter is overkill, we will use a tiny runtime method:
-            var dict = SimpleJson.Parse(raw);
-            var items = new System.Text.StringBuilder();
-            items.Append("{\"items\":[");
-            bool firstLang = true;
-            foreach (var kv in dict)
-            {
-                if (!firstLang) items.Append(',');
-                firstLang = false;
-                items.Append("{\"code\":\"").Append(kv.Key).Append("\",\"entries\":[");
-                bool firstEntry = true;
-                foreach (var kv2 in kv.Value)
-                {
-                    if (!firstEntry) items.Append(',');
-                    firstEntry = false;
-                    items.Append("{\"key\":\"").Append(Escape(kv2.Key)).Append("\",\"value\":\"")
-                         .Append(Escape(kv2.Value)).Append("\"}");
-                }
-                items.Append("]}");
-            }
-            items.Append("]}");
-            return items.ToString();
-        }
-
-        private static string Escape(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n");
 
         public static string Get(UnityEngine.Object context, string key, params object[] args)
         {
@@ -155,8 +104,12 @@ namespace needon.Editor.Util
                         t = t.parent;
                     }
                 }
-                var any = UnityEngine.Object.FindObjectOfType<AutoCloset>();
-                if (any != null) return any.language;
+                if (_fallbackClosetDirty)
+                {
+                    _cachedFallbackCloset = UnityEngine.Object.FindObjectOfType<AutoCloset>(true);
+                    _fallbackClosetDirty = false;
+                }
+                if (_cachedFallbackCloset != null) return _cachedFallbackCloset.language;
             }
             catch { }
             return AutoCloset.ClosetLanguage.English;

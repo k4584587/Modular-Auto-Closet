@@ -22,7 +22,7 @@ namespace needon.Editor
         private static void Refresh()
         {
             ClosetChildren.Clear();
-            foreach (var closet in Object.FindObjectsOfType<AutoCloset>())
+            foreach (var closet in Object.FindObjectsOfType<AutoCloset>(true))
             {
                 var children = new HashSet<Transform>();
                 foreach (Transform child in closet.transform)
@@ -35,11 +35,21 @@ namespace needon.Editor
 
         private static void OnHierarchyChanged()
         {
-            var closets = Object.FindObjectsOfType<AutoCloset>();
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+                return;
+
+            var closets = Object.FindObjectsOfType<AutoCloset>(true);
             foreach (var closet in closets)
             {
                 if (!ClosetChildren.TryGetValue(closet, out var known))
-                    ClosetChildren[closet] = known = new HashSet<Transform>();
+                {
+                    // 새로 등장한 옷장(씬 로드·프리팹 배치·복제 등)은 현재 자식 스냅샷만 기록하고 팝업을 띄우지 않음
+                    known = new HashSet<Transform>();
+                    foreach (Transform child in closet.transform)
+                        known.Add(child);
+                    ClosetChildren[closet] = known;
+                    continue;
+                }
 
                 var currentChildren = new HashSet<Transform>();
                 foreach (Transform child in closet.transform)
